@@ -3067,29 +3067,6 @@ enum message_type
 
 
 
-struct send_hardware_message_request
-{
-    struct request_header __header;
-    user_handle_t   win;
-    union hw_input  input;
-    unsigned int    flags;
-    /* VARARG(report,bytes); */
-    char __pad_60[4];
-};
-struct send_hardware_message_reply
-{
-    struct reply_header __header;
-    int             wait;
-    int             prev_x;
-    int             prev_y;
-    int             new_x;
-    int             new_y;
-    char __pad_28[4];
-};
-#define SEND_HWMSG_INJECTED    0x01
-
-
-
 struct get_message_request
 {
     struct request_header __header;
