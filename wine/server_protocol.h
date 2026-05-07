@@ -1058,15 +1058,6 @@ typedef volatile struct
     object_shm_t         shm;
 } shared_object_t;
 
-#ifdef _NTUSER_
-typedef volatile struct
-{
-    struct user_entry user_entries[MAX_USER_HANDLES];
-} session_shm_t;
-
-#endif /* _NTUSER_ */
-
-
 
 
 struct new_process_request
