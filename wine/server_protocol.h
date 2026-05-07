@@ -6534,7 +6534,6 @@ union generic_request
     struct get_process_idle_event_request get_process_idle_event_request;
     struct send_message_request send_message_request;
     struct post_quit_message_request post_quit_message_request;
-    struct send_hardware_message_request send_hardware_message_request;
     struct get_message_request get_message_request;
     struct reply_message_request reply_message_request;
     struct accept_hardware_message_request accept_hardware_message_request;
