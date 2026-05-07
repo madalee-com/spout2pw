@@ -404,6 +404,8 @@ prepare_proton() {
     log "Wine version: '$version'"
 
     case "$version" in
+        "Wine 11."*)
+        ;;
         "Wine 10."*)
         ;;
         *)
