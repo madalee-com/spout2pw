@@ -313,37 +313,6 @@ struct winevent_msg_data
 
 };
 
-union hw_input
-{
-    int type;
-    struct
-    {
-        int            type;
-        unsigned short vkey;
-        unsigned short scan;
-        unsigned int   flags;
-        unsigned int   time;
-        lparam_t       info;
-    } kbd;
-    struct
-    {
-        int            type;
-        int            x;
-        int            y;
-        unsigned int   data;
-        unsigned int   flags;
-        unsigned int   time;
-        lparam_t       info;
-    } mouse;
-    struct
-    {
-        int            type;
-        unsigned int   msg;
-        lparam_t       wparam;
-        lparam_t       lparam;
-        struct hid_input hid;
-    } hw;
-};
 
 union message_data
 {
