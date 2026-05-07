@@ -6844,7 +6844,6 @@ union generic_reply
     struct get_process_idle_event_reply get_process_idle_event_reply;
     struct send_message_reply send_message_reply;
     struct post_quit_message_reply post_quit_message_reply;
-    struct send_hardware_message_reply send_hardware_message_reply;
     struct get_message_reply get_message_reply;
     struct reply_message_reply reply_message_reply;
     struct accept_hardware_message_reply accept_hardware_message_reply;
