@@ -141,7 +141,7 @@ void show_error(HRESULT res, const char *msg) {
 
     free(dialog_msg);
 }
-
+/*
 static HANDLE open_shared_resource(HANDLE kmt_handle) {
     UNICODE_STRING shared_gpu_resource_us;
     struct shared_resource_open *inbuff;
@@ -187,7 +187,7 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
 
     return shared_resource;
 }
-
+*/
 static NTSTATUS get_shared_metadata(HANDLE handle, void *buf, uint32_t buf_size,
                                     uint32_t *metadata_size) {
     IO_STATUS_BLOCK iosb;
@@ -301,12 +301,6 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     NTSTATUS status;
     IO_STATUS_BLOCK iosb;
     obj_handle_t unix_resource;
-    HANDLE memhandle = open_shared_resource(info.shareHandle);
-    if (memhandle == INVALID_HANDLE_VALUE) {
-        ret.flags |= RECEIVER_TEXTURE_INVALID;
-        WARN("Share handle open failed\n");
-        return ret;
-    }
 
     // 1. Open the primary adapter using GDI display name
     D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME openAdapter = {0};
@@ -359,7 +353,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     }
 
     TRACE("Share handle opened: 0x%lx -> 0x%lx\n", HandleToLong(share_handle),
-          HandleToLong(memhandle));
+          HandleToLong(share_handle));
 
     Sleep(50);
 
@@ -369,7 +363,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
              "0x%lx)\n",
              HandleToLong(share_handle), HandleToLong(info.shareHandle));
         ret.flags |= RECEIVER_TEXTURE_INVALID;
-        NtClose(memhandle);
+        NtClose(share_handle);
         return ret;
     }
 
@@ -382,7 +376,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     if (!SpoutDXToCUpdateDXTexture(spout, &info)) {
         WARN("Failed to update DX texture\n");
         ret.flags |= RECEIVER_TEXTURE_INVALID;
-        NtClose(memhandle);
+        NtClose(share_handle);
         return ret;
     }
 
@@ -429,7 +423,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     struct shared_resource_info shared_resource_info;
 
 no_metadata:
-    if (get_shared_info(memhandle, &shared_resource_info)) {
+    if (get_shared_info(share_handle, &shared_resource_info)) {
         TRACE("-> info failed\n");
         goto no_resource_size;
     }
@@ -440,19 +434,19 @@ no_metadata:
     ret.resource_size = shared_resource_info.resource_size;
 
 no_resource_size:
-    if (NtDeviceIoControlFile(memhandle, NULL, NULL, NULL, &iosb,
+    if (NtDeviceIoControlFile(share_handle, NULL, NULL, NULL, &iosb,
                               IOCTL_SHARED_GPU_RESOURCE_GET_UNIX_RESOURCE, NULL,
                               0, &unix_resource, sizeof(unix_resource))) {
         ret.flags |= RECEIVER_TEXTURE_INVALID;
         TRACE("-> kmt handle failed\n");
-        NtClose(memhandle);
+        NtClose(share_handle);
         return ret;
     }
 
     status = wine_server_handle_to_fd(wine_server_ptr_handle(unix_resource),
                                       GENERIC_ALL, &fd, NULL);
     NtClose(wine_server_ptr_handle(unix_resource));
-    NtClose(memhandle);
+    NtClose(share_handle);
     if (status != STATUS_SUCCESS) {
         ret.flags |= RECEIVER_TEXTURE_INVALID;
         TRACE("-> failed to convert handle to fd\n");
