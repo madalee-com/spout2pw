@@ -18,6 +18,7 @@
 
 #include "wine/debug.h"
 #include "wine/server.h"
+#include <wine/d3dkmthk.h>
 
 #include <spoutdxtoc.h>
 
@@ -280,7 +281,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
         return ret;
     }
 
-    HANDLE share_handle = info.shareHandle;
+    D3DKMT_HANDLE share_handle = info.shareHandle;
 
     TRACE("Sender %s: %dx%d fmt=%d handle=0x%lx usage=0x%x changed=%d\n",
           receiver->name, info.width, info.height, info.format,
@@ -304,6 +305,56 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     if (memhandle == INVALID_HANDLE_VALUE) {
         ret.flags |= RECEIVER_TEXTURE_INVALID;
         WARN("Share handle open failed\n");
+        return ret;
+    }
+
+    // 1. Open the primary adapter using GDI display name
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME openAdapter = {0};
+    lstrcpynW(openAdapter.DeviceName, L"\\\\.\\DISPLAY1", 32); // Default primary monitor
+
+    status = D3DKMTOpenAdapterFromGdiDisplayName(&openAdapter);
+    if (status != STATUS_SUCCESS) {
+        WARN("Open primary adapter failed (0x%lx)\n",
+        status);
+        return ret;
+    }
+
+    // 2. Create a kernel-mode device context on that adapter
+    D3DKMT_CREATEDEVICE createDevice = {0};
+    createDevice.hAdapter = openAdapter.hAdapter;
+    
+    D3DKMT_HANDLE hDevice = 0;
+    D3DKMT_HANDLE hAdapter = 0;
+
+    status = D3DKMTCreateDevice(&createDevice);
+    if (status == STATUS_SUCCESS) {
+        hDevice = createDevice.hDevice;
+        hAdapter = openAdapter.hAdapter;
+    } else {
+        D3DKMTCloseAdapter(&openAdapter);
+    }
+    if (status != STATUS_SUCCESS) {
+        WARN("Open primary adapter device failed (0x%lx)\n",
+        status);
+        return ret;
+    }
+
+
+    // 1. Query info about the shared resource to get allocation count
+    D3DKMT_QUERYRESOURCEINFO queryInfo = {0};
+    queryInfo.hDevice = hDevice;
+    queryInfo.hGlobalShare = hSharedResource;
+
+    // 2. Prepare structure to open the resource
+    D3DKMT_OPENRESOURCE openResource = {0};
+    openResource.hDevice = hDevice;
+    openResource.hGlobalShare = share_handle;
+    openResource.NumAllocations = queryInfo.NumAllocations;
+
+    status = D3DKMTOpenResource(&openResource);
+    if (status != STATUS_SUCCESS) {
+        WARN("Open shared resource failed (0x%lx)\n",
+        status);
         return ret;
     }
 
