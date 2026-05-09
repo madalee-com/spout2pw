@@ -153,7 +153,7 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     NTSTATUS status;
     DWORD in_size;
 
-    init_unicode_string(&shared_gpu_resource_us, shared_gpu_resourceW);
+    //init_unicode_string(&shared_gpu_resource_us, shared_gpu_resourceW);
 /*
     attr.Length = sizeof(attr);
     attr.RootDirectory = 0;
