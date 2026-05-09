@@ -142,34 +142,26 @@ void show_error(HRESULT res, const char *msg) {
 }
 
 static HANDLE open_shared_resource(HANDLE kmt_handle) {
-    /*static const WCHAR shared_gpu_resourceW[] = {
+    static const WCHAR shared_gpu_resourceW[] = {
         '\\', '?', '?', '\\', 'S', 'h', 'a', 'r', 'e', 'd', 'G',
         'p',  'u', 'R', 'e',  's', 'o', 'u', 'r', 'c', 'e', 0};
-    UNICODE_STRING shared_gpu_resource_us;*/
+    UNICODE_STRING shared_gpu_resource_us;
     struct shared_resource_open *inbuff;
-    //HANDLE shared_resource;
-    //OBJECT_ATTRIBUTES attr;
+    HANDLE shared_resource;
+    OBJECT_ATTRIBUTES attr;
     IO_STATUS_BLOCK iosb;
     NTSTATUS status;
     DWORD in_size;
 
-    //init_unicode_string(&shared_gpu_resource_us, shared_gpu_resourceW);
-/*
+    init_unicode_string(&shared_gpu_resource_us, shared_gpu_resourceW);
+
     attr.Length = sizeof(attr);
     attr.RootDirectory = 0;
     attr.Attributes = 0;
     attr.ObjectName = &shared_gpu_resource_us;
     attr.SecurityDescriptor = NULL;
-    attr.SecurityQualityOfService = NULL;*/
+    attr.SecurityQualityOfService = NULL;
 
-    HANDLE shared_resource = CreateFileA("\\\\.\\SharedGpuResource", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (shared_resource == INVALID_HANDLE_VALUE) {
-        ERR("Failed to load open a shared resource handle, status %#lx.\n",
-            (long int)shared_resource);
-        return INVALID_HANDLE_VALUE;
-    }
-    
-/*
     if ((status = NtCreateFile(&shared_resource, GENERIC_READ | GENERIC_WRITE,
                                &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL,
                                FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, 0,
@@ -178,7 +170,6 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
             (long int)status);
         return INVALID_HANDLE_VALUE;
     }
-*/
 
     in_size = sizeof(*inbuff);
     inbuff = calloc(1, in_size);
