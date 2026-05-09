@@ -302,58 +302,73 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     IO_STATUS_BLOCK iosb;
     obj_handle_t unix_resource;
 
-    // 1. Open the primary adapter using GDI display name
-    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME openAdapter = {0};
-    lstrcpynW(openAdapter.DeviceName, L"\\\\.\\DISPLAY1", 32); // Default primary monitor
 
-    status = D3DKMTOpenAdapterFromGdiDisplayName(&openAdapter);
-    if (status != STATUS_SUCCESS) {
-        WARN("Open primary adapter failed (0x%lx)\n",
-        status);
+    D3DKMT_OPENADAPTERFROMHDC openAdapterDesc = {};
+    D3DKMT_CREATEDEVICE createDeviceDesc = {};
+    D3DKMT_OPENRESOURCE openResourceDesc = {};
+
+    // Step 1: Open the adapter (get the default GPU)
+    // We'll use the display adapter by getting a DC from the desktop
+    HDC hdc = GetDC(NULL);
+    if (!hdc) {
+        ERR("Failed to get desktop DC\n");
         return ret;
     }
 
-    // 2. Create a kernel-mode device context on that adapter
-    D3DKMT_CREATEDEVICE createDevice = {0};
-    createDevice.hAdapter = openAdapter.hAdapter;
-    
-    D3DKMT_HANDLE hDevice = 0;
-    D3DKMT_HANDLE hAdapter = 0;
+    openAdapterDesc.hDc = hdc;
+    status = D3DKMTOpenAdapterFromHdc(&openAdapterDesc);
+    ReleaseDC(NULL, hdc);
 
-    status = D3DKMTCreateDevice(&createDevice);
-    if (status == STATUS_SUCCESS) {
-        hDevice = createDevice.hDevice;
-        hAdapter = openAdapter.hAdapter;
-    } else {
-        D3DKMTCloseAdapter(&openAdapter);
-    }
-    if (status != STATUS_SUCCESS) {
-        WARN("Open primary adapter device failed (0x%lx)\n",
-        status);
+    if (!NT_SUCCESS(status)) {
+        ERR("D3DKMTOpenAdapterFromHdc failed: 0x%X\n", status);
         return ret;
     }
 
+    D3DKMT_HANDLE hAdapter = openAdapterDesc.hAdapter;
+    TRACE("Adapter opened successfully: 0x%X\n", hAdapter);
 
-    // 1. Query info about the shared resource to get allocation count
-    D3DKMT_QUERYRESOURCEINFO queryInfo = {0};
-    queryInfo.hDevice = hDevice;
-    queryInfo.hGlobalShare = hSharedResource;
+    // Step 2: Create a device on the adapter
+    createDeviceDesc.hAdapter = hAdapter;
+    createDeviceDesc.Flags.LegacyMode = FALSE;
+    createDeviceDesc.Flags.DisableGpuTimeout = FALSE;
 
-    // 2. Prepare structure to open the resource
-    D3DKMT_OPENRESOURCE openResource = {0};
-    openResource.hDevice = hDevice;
-    openResource.hGlobalShare = HandleToLong(shareHandle));
-    openResource.NumAllocations = queryInfo.NumAllocations;
+    status = D3DKMTCreateDevice(&createDeviceDesc);
+    if (!NT_SUCCESS(status)) {
+        ERR("D3DKMTCreateDevice failed: 0x%X\n", status);
+        D3DKMT_CLOSEADAPTER closeAdapterDesc = { hAdapter };
+        D3DKMTCloseAdapter(&closeAdapterDesc);
+        return ret;
+    }
 
-    status = D3DKMTOpenResource(&openResource);
-    if (status != STATUS_SUCCESS) {
-        WARN("Open shared resource failed (0x%lx)\n",
-        status);
+    D3DKMT_HANDLE hDevice = createDeviceDesc.hDevice;
+    TRACE("Device created successfully: 0x%X\n", hDevice);
+
+    // Step 3: Open the shared resource
+    openResourceDesc.hDevice = hDevice;
+    openResourceDesc.hGlobalShare = share_handle;
+    openResourceDesc.Type = D3DKMT_HANDLE_KMD;
+
+    status = D3DKMTOpenResource(&openResourceDesc);
+    if (!NT_SUCCESS(status)) {
+        ERR("D3DKMTOpenResource failed: 0x%X\n", status);
+        D3DKMT_DESTROYDEVICE destroyDeviceDesc = { hDevice };
+        D3DKMTDestroyDevice(&destroyDeviceDesc);
+        D3DKMT_CLOSEADAPTER closeAdapterDesc = { hAdapter };
+        D3DKMTCloseAdapter(&closeAdapterDesc);
+        return ret;
+    }
+
+    HANDLE memhandle = openResourceDesc.hResource;
+    printf("Resource opened successfully: 0x%X\n", hResource);
+
+    if (memhandle == INVALID_HANDLE_VALUE) {
+        ret.flags |= RECEIVER_TEXTURE_INVALID;
+        WARN("Share handle open failed\n");
         return ret;
     }
 
     TRACE("Share handle opened: 0x%lx -> 0x%lx\n", HandleToLong(share_handle),
-          HandleToLong(share_handle));
+          HandleToLong(memhandle));
 
     Sleep(50);
 
