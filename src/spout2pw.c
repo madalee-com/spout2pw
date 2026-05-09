@@ -150,7 +150,7 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     NTSTATUS status;
     DWORD in_size;
 
-    RtlInitUnicodeString(&shared_gpu_resource_us, L"\\\\.\\SharedGpuResource");
+    RtlInitUnicodeString(&shared_gpu_resource_us, L"\\.\SharedGpuResource");
 
     attr.Length = sizeof(attr);
     attr.RootDirectory = 0;
