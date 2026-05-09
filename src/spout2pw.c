@@ -143,8 +143,8 @@ void show_error(HRESULT res, const char *msg) {
 
 static HANDLE open_shared_resource(HANDLE kmt_handle) {
     static const WCHAR shared_gpu_resourceW[] = {
-        '\\', '\\', '.', '\\', 'S', 'h', 'a', 'r', 'e', 'd', 'G',
-        'p',  'u', 'R', 'e',  's', 'o', 'u', 'r', 'c', 'e', 0};
+        '\\', '?', '?', '\\', 'S', 'h', 'a', 'r', 'e', 'd', 'G',
+        'p',  'u', 'R', 'e',  's', 'o', 'u', 'r', 'c', 'f', 0};
     UNICODE_STRING shared_gpu_resource_us;
     struct shared_resource_open *inbuff;
     HANDLE shared_resource;
