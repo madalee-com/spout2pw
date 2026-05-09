@@ -162,7 +162,7 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     attr.SecurityDescriptor = NULL;
     attr.SecurityQualityOfService = NULL;*/
 
-    HANDLE shared_resource = CreateFileA("\\\\.\\SharedGpuResource", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)
+    HANDLE shared_resource = CreateFileA("\\\\.\\SharedGpuResource", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (shared_resource == INVALID_HANDLE_VALUE) {
         ERR("Failed to load open a shared resource handle, status %#lx.\n",
             (long int)handle);
