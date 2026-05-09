@@ -162,13 +162,13 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     attr.SecurityDescriptor = NULL;
     attr.SecurityQualityOfService = NULL;
 
-    if ((status = pNtCreateFile(&shared_resource, GENERIC_READ | GENERIC_WRITE,
+    if ((status = NtCreateFile(&shared_resource, GENERIC_READ | GENERIC_WRITE,
                                &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL,
                                FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, 0,
                                NULL, 0))) {
         ERR("Failed to load open a shared resource handle, status %#lx.\n",
             (long int)status);
-        return INVALID_HANDLE_VALUE;
+        //return INVALID_HANDLE_VALUE;
     }
 
     in_size = sizeof(*inbuff);
