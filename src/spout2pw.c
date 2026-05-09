@@ -149,7 +149,7 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     struct shared_resource_open *inbuff;
     //HANDLE shared_resource;
     //OBJECT_ATTRIBUTES attr;
-    //IO_STATUS_BLOCK iosb;
+    IO_STATUS_BLOCK iosb;
     NTSTATUS status;
     DWORD in_size;
 
