@@ -162,14 +162,23 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     attr.SecurityDescriptor = NULL;
     attr.SecurityQualityOfService = NULL;
 
+    HANDLE handle = ::CreateFileA("\\\\.\\SharedGpuResource", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)
+    if (handle == INVALID_HANDLE_VALUE) {
+        ERR("Failed to load open a shared resource handle, status %#lx.\n",
+            (long int)handle);
+        return INVALID_HANDLE_VALUE;
+    }
+    
+/*
     if ((status = NtCreateFile(&shared_resource, GENERIC_READ | GENERIC_WRITE,
                                &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL,
                                FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, 0,
                                NULL, 0))) {
         ERR("Failed to load open a shared resource handle, status %#lx.\n",
             (long int)status);
-        //return INVALID_HANDLE_VALUE;
+        return INVALID_HANDLE_VALUE;
     }
+*/
 
     in_size = sizeof(*inbuff);
     inbuff = calloc(1, in_size);
