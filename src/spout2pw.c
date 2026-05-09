@@ -144,7 +144,7 @@ void show_error(HRESULT res, const char *msg) {
 static HANDLE open_shared_resource(HANDLE kmt_handle) {
     static const WCHAR shared_gpu_resourceW[] = {
         '\\', '?', '?', '\\', 'S', 'h', 'a', 'r', 'e', 'd', 'G',
-        'p',  'u', 'R', 'e',  's', 'o', 'u', 'r', 'c', 'f', 0};
+        'p',  'u', 'R', 'e',  's', 'o', 'u', 'r', 'c', 'e', 0};
     UNICODE_STRING shared_gpu_resource_us;
     struct shared_resource_open *inbuff;
     HANDLE shared_resource;
@@ -162,7 +162,7 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     attr.SecurityDescriptor = NULL;
     attr.SecurityQualityOfService = NULL;
 
-    if ((status = NtCreateFile(&shared_resource, GENERIC_READ | GENERIC_WRITE,
+    if ((status = pNtCreateFile(&shared_resource, GENERIC_READ | GENERIC_WRITE,
                                &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL,
                                FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, 0,
                                NULL, 0))) {
