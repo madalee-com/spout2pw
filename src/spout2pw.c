@@ -142,9 +142,6 @@ void show_error(HRESULT res, const char *msg) {
 }
 
 static HANDLE open_shared_resource(HANDLE kmt_handle) {
-    static const WCHAR shared_gpu_resourceW[] = {
-        '\\', '?', '?', '\\', 'S', 'h', 'a', 'r', 'e', 'd', 'G',
-        'p',  'u', 'R', 'e',  's', 'o', 'u', 'r', 'c', 'e', 0};
     UNICODE_STRING shared_gpu_resource_us;
     struct shared_resource_open *inbuff;
     HANDLE shared_resource;
@@ -153,7 +150,7 @@ static HANDLE open_shared_resource(HANDLE kmt_handle) {
     NTSTATUS status;
     DWORD in_size;
 
-    init_unicode_string(&shared_gpu_resource_us, shared_gpu_resourceW);
+    RtlInitUnicodeString(&shared_gpu_resource_us, L"\\\\.\\SharedGpuResource");
 
     attr.Length = sizeof(attr);
     attr.RootDirectory = 0;
