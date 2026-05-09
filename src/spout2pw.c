@@ -18,7 +18,7 @@
 
 #include "wine/debug.h"
 #include "wine/server.h"
-#include <wine/d3dkmthk.h>
+#include <ddk/d3dkmthk.h>
 
 #include <spoutdxtoc.h>
 
@@ -281,7 +281,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
         return ret;
     }
 
-    D3DKMT_HANDLE share_handle = info.shareHandle;
+    HANDLE share_handle = info.shareHandle;
 
     TRACE("Sender %s: %dx%d fmt=%d handle=0x%lx usage=0x%x changed=%d\n",
           receiver->name, info.width, info.height, info.format,
@@ -348,7 +348,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     // 2. Prepare structure to open the resource
     D3DKMT_OPENRESOURCE openResource = {0};
     openResource.hDevice = hDevice;
-    openResource.hGlobalShare = share_handle;
+    openResource.hGlobalShare = HandleToLong(shareHandle));
     openResource.NumAllocations = queryInfo.NumAllocations;
 
     status = D3DKMTOpenResource(&openResource);
