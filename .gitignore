@@ -1,3 +1,5 @@
 /build/
 /build-pw/
 .cache
+subprojects/.wraplock
+.vscode/c_cpp_properties.json

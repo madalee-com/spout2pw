@@ -8,10 +8,20 @@
 
 #include "spout2pw_unix.h"
 
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
+#define COBJMACROS
+#include "initguid.h"
+#include "dxgi1_6.h"
+#include "d3d11.h"
+#include "d3d12.h"
+#include "d3d12sdklayers.h"
+
 #include <winbase.h>
 #include <windef.h>
 #include <winnt.h>
 #include <winsvc.h>
+#include <wingdi.h>
 #include <winuser.h>
 
 #include <winioctl.h>
@@ -21,6 +31,7 @@
 #include <ddk/d3dkmthk.h>
 
 #include <spoutdxtoc.h>
+#include "subprojects/spoutdxtoc/Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.h" // for creating a shared texture
 
 WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
@@ -292,8 +303,10 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     ret.format = info.format;
     ret.usage = info.usage;
 
+    ERR("Before ret\n");
     if (!info.changed && !receiver->force_update)
         return ret;
+    ERR("After ret\n");
 
     receiver->force_update = true;
 
@@ -302,25 +315,52 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     IO_STATUS_BLOCK iosb;
     obj_handle_t unix_resource;
 
+    
+    
+    DXGI_ADAPTER_DESC device_adapter_desc, desc;
+    IDXGIAdapter *adapter;
+    IDXGIFactory *factory;
+    HRESULT hr;
 
-    D3DKMT_OPENADAPTERFROMHDC openAdapterDesc = {};
+    ERR("before create factory\n");
+    hr = CreateDXGIFactory(&IID_IDXGIFactory, (void **)&factory);
+    if (hr != S_OK) {
+        ERR("Got unexpected hr %#lx.\n", hr);
+    }
+    ERR("after create factory\n");
+
+    unsigned int adapter_index = 0;
+    if ((hr = IDXGIFactory_EnumAdapters(factory, adapter_index, &adapter)) == S_OK)
+    {
+        ERR("before getdesc\n");
+        hr = IDXGIAdapter_GetDesc(adapter, &desc);
+        ERR("after getdesc\n");
+        if (hr != S_OK) {
+            ERR("Got unexpected hr %#lx.\n", hr);
+        }
+    }
+
+    
+    ID3D11Texture2D* pTexture2D;
+    hr = pDevice->OpenSharedResource(share_handle, __uuidof(ID3D11Texture2D), (void**)&pTexture2D);
+
+
+    D3DKMT_OPENADAPTERFROMLUID openAdapterDesc = {0};
+    DISPLAY_DEVICEW dd;
+    
     D3DKMT_CREATEDEVICE createDeviceDesc = {};
     D3DKMT_OPENRESOURCE openResourceDesc = {};
 
-    // Step 1: Open the adapter (get the default GPU)
-    // We'll use the display adapter by getting a DC from the desktop
-    HDC hdc = GetDC(NULL);
-    if (!hdc) {
-        ERR("Failed to get desktop DC\n");
-        return ret;
-    }
 
-    openAdapterDesc.hDc = hdc;
-    status = D3DKMTOpenAdapterFromHdc(&openAdapterDesc);
-    ReleaseDC(NULL, hdc);
+    memset(&dd, 0, sizeof (dd));
+    dd.cb = sizeof dd;
+    
+    openAdapterDesc.AdapterLuid = desc.AdapterLuid;
+
+    status = D3DKMTOpenAdapterFromLuid(&openAdapterDesc);
 
     if (!NT_SUCCESS(status)) {
-        ERR("D3DKMTOpenAdapterFromHdc failed: 0x%X\n", status);
+        ERR("D3DKMTOpenAdapterFromDeviceName failed: 0x%ld\n", status);
         return ret;
     }
 
@@ -334,7 +374,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
 
     status = D3DKMTCreateDevice(&createDeviceDesc);
     if (!NT_SUCCESS(status)) {
-        ERR("D3DKMTCreateDevice failed: 0x%X\n", status);
+        ERR("D3DKMTCreateDevice failed: 0x%ld\n", status);
         D3DKMT_CLOSEADAPTER closeAdapterDesc = { hAdapter };
         D3DKMTCloseAdapter(&closeAdapterDesc);
         return ret;
@@ -345,12 +385,12 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
 
     // Step 3: Open the shared resource
     openResourceDesc.hDevice = hDevice;
-    openResourceDesc.hGlobalShare = share_handle;
-    openResourceDesc.Type = D3DKMT_HANDLE_KMD;
+    openResourceDesc.hGlobalShare = HandleToLong(share_handle);
+    ERR("D3DKMTOpenResource share_handle: 0x%ld\n", share_handle);
 
     status = D3DKMTOpenResource(&openResourceDesc);
     if (!NT_SUCCESS(status)) {
-        ERR("D3DKMTOpenResource failed: 0x%X\n", status);
+        ERR("D3DKMTOpenResource failed: 0x%ld\n", status);
         D3DKMT_DESTROYDEVICE destroyDeviceDesc = { hDevice };
         D3DKMTDestroyDevice(&destroyDeviceDesc);
         D3DKMT_CLOSEADAPTER closeAdapterDesc = { hAdapter };
@@ -358,8 +398,10 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
         return ret;
     }
 
-    HANDLE memhandle = openResourceDesc.hResource;
-    printf("Resource opened successfully: 0x%X\n", hResource);
+    HANDLE memhandle = NULL;
+    
+    spoutDirectX::OpenDX11shareHandle(g_pd3dDevice, &g_pSenderTexture, g_dxShareHandle);
+    printf("Resource opened successfully: 0x%X\n", openResourceDesc.hResource);
 
     if (memhandle == INVALID_HANDLE_VALUE) {
         ret.flags |= RECEIVER_TEXTURE_INVALID;
@@ -371,6 +413,8 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
           HandleToLong(memhandle));
 
     Sleep(50);
+
+    
 
     if (!SpoutDXToCGetSenderInfo(spout, &info) ||
         info.shareHandle != share_handle) {

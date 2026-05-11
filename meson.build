@@ -92,6 +92,7 @@ unix_link_args = [
 ]
 
 windows_deps = [
+  c.find_library('dxgi', dirs: wine_lib_paths),
   c.find_library('d3d11', dirs: wine_lib_paths),
   c.find_library('ntdll', dirs: wine_lib_paths),
   c.find_library('ucrt', dirs: wine_lib_paths),
