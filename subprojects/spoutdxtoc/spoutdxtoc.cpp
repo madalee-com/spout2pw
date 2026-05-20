@@ -295,7 +295,7 @@ bool __stdcall SpoutDXToCGetSenderInfo(SPOUTDXTOC_RECEIVER *self,
     if (!self->sendernames.getSharedInfo(self->sendername.c_str(), &sinfo))
         return false;
 
-    info->shareHandle = (HANDLE)(LongToHandle((long)sinfo.shareHandle));
+    info->shareHandle = sinfo.shareHandle;
     info->width = sinfo.width;
     info->height = sinfo.height;
     info->format = sinfo.format;
@@ -323,14 +323,14 @@ bool SpoutDXToCUpdateDXTexture(SPOUTDXTOC_RECEIVER *self,
 
     self->lastShareHandle = 0;
     self->texture_locked = false;
-    bool success = InitDXTexture(self, HandleToLong(info->shareHandle));
+    bool success = InitDXTexture(self, info->shareHandle);
 
     LeaveCriticalSection(&self->cs);
 
     if (!success)
         return false;
 
-    self->lastShareHandle = HandleToLong(info->shareHandle);
+    self->lastShareHandle = info->shareHandle;
     info->adapterId = self->lastAdapterId;
 
     return true;
@@ -373,5 +373,23 @@ bool __stdcall SpoutDXToCGetFrameCount(SPOUTDXTOC_RECEIVER *self,
     if (framecount)
         *framecount = self->frame.GetSenderFrame();
 
+    return ret;
+}
+
+bool __stdcall SpoutDXToCGetTexture(SPOUTDXTOC_RECEIVER *self,
+                                    LONG_PTR **hSharedTexture) {
+    assert(self != NULL);
+    bool ret = true;
+
+    EnterCriticalSection(&self->cs);
+
+    if (self->sharedTexture) {
+        SpoutLogError("we should have a shared texture");
+        *hSharedTexture = (LONG_PTR *)self->sharedTexture;
+    } else {
+        ret = false;
+    }
+
+    LeaveCriticalSection(&self->cs);
     return ret;
 }

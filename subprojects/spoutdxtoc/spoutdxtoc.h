@@ -19,7 +19,7 @@ typedef struct {
 
 typedef struct {
     uint8_t changed;
-    HANDLE shareHandle;
+    uint32_t shareHandle;
     uint32_t width;
     uint32_t height;
     uint32_t format;
@@ -60,6 +60,7 @@ bool SpoutDXToCUpdateDXTexture(SPOUTDXTOC_RECEIVER *self,
 bool SpoutDXToCCheckTextureAccess(SPOUTDXTOC_RECEIVER *self);
 bool SpoutDXToCAllowTextureAccess(SPOUTDXTOC_RECEIVER *self);
 bool SpoutDXToCGetFrameCount(SPOUTDXTOC_RECEIVER *self, uint64_t *framecount);
+bool SpoutDXToCGetTexture(SPOUTDXTOC_RECEIVER *self, LONG_PTR **hSharedTexture);
 
 #ifdef __cplusplus
 }

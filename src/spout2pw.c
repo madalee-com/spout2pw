@@ -31,7 +31,7 @@
 #include <ddk/d3dkmthk.h>
 
 #include <spoutdxtoc.h>
-#include "subprojects/spoutdxtoc/Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.h" // for creating a shared texture
+//#include "subprojects/spoutdxtoc/Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.h" // for creating a shared texture
 
 WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
@@ -152,53 +152,7 @@ void show_error(HRESULT res, const char *msg) {
 
     free(dialog_msg);
 }
-/*
-static HANDLE open_shared_resource(HANDLE kmt_handle) {
-    UNICODE_STRING shared_gpu_resource_us;
-    struct shared_resource_open *inbuff;
-    HANDLE shared_resource;
-    OBJECT_ATTRIBUTES attr;
-    IO_STATUS_BLOCK iosb;
-    NTSTATUS status;
-    DWORD in_size;
 
-    RtlInitUnicodeString(&shared_gpu_resource_us, L"\\.\SharedGpuResource");
-
-    attr.Length = sizeof(attr);
-    attr.RootDirectory = 0;
-    attr.Attributes = 0;
-    attr.ObjectName = &shared_gpu_resource_us;
-    attr.SecurityDescriptor = NULL;
-    attr.SecurityQualityOfService = NULL;
-
-    if ((status = NtCreateFile(&shared_resource, GENERIC_READ | GENERIC_WRITE,
-                               &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN,
-                               FILE_NON_DIRECTORY_FILE, NULL, 0))) {
-        ERR("Failed to load open a shared resource handle, status %#lx.\n",
-            (long int)status);
-        return INVALID_HANDLE_VALUE;
-    }
-
-    in_size = sizeof(*inbuff);
-    inbuff = calloc(1, in_size);
-    inbuff->kmt_handle = wine_server_obj_handle(kmt_handle);
-
-    status = NtDeviceIoControlFile(shared_resource, NULL, NULL, NULL, &iosb,
-                                   IOCTL_SHARED_GPU_RESOURCE_OPEN, inbuff,
-                                   in_size, NULL, 0);
-
-    free(inbuff);
-
-    if (status) {
-        ERR("Failed to open video resource, status %#lx.\n", (long int)status);
-        NtClose(shared_resource);
-        return INVALID_HANDLE_VALUE;
-    }
-
-    return shared_resource;
-}
-*/
 static NTSTATUS get_shared_metadata(HANDLE handle, void *buf, uint32_t buf_size,
                                     uint32_t *metadata_size) {
     IO_STATUS_BLOCK iosb;
@@ -276,7 +230,7 @@ static DWORD WINAPI receiver_thread(void *arg) {
 static struct source_info get_receiver_info(struct receiver *receiver) {
     SPOUTDXTOC_RECEIVER *spout = receiver->spout;
     SPOUTDXTOC_SENDERINFO info;
-    struct source_info ret = {.opaque_fd = -1};
+    struct source_info ret = {};
 
     TRACE("Updating receiver %p -> %p (%s)\n", receiver, spout, receiver->name);
 
@@ -292,7 +246,7 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
         return ret;
     }
 
-    HANDLE share_handle = info.shareHandle;
+    HANDLE share_handle = (HANDLE)(LongToHandle((long)(info.shareHandle)));
 
     TRACE("Sender %s: %dx%d fmt=%d handle=0x%lx usage=0x%x changed=%d\n",
           receiver->name, info.width, info.height, info.format,
@@ -303,133 +257,54 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
     ret.format = info.format;
     ret.usage = info.usage;
 
-    ERR("Before ret\n");
     if (!info.changed && !receiver->force_update)
         return ret;
-    ERR("After ret\n");
 
     receiver->force_update = true;
 
-    int fd;
-    NTSTATUS status;
-    IO_STATUS_BLOCK iosb;
-    obj_handle_t unix_resource;
-
-    
-    
-    DXGI_ADAPTER_DESC device_adapter_desc, desc;
-    IDXGIAdapter *adapter;
-    IDXGIFactory *factory;
-    HRESULT hr;
-
-    ERR("before create factory\n");
-    hr = CreateDXGIFactory(&IID_IDXGIFactory, (void **)&factory);
-    if (hr != S_OK) {
-        ERR("Got unexpected hr %#lx.\n", hr);
-    }
-    ERR("after create factory\n");
-
-    unsigned int adapter_index = 0;
-    if ((hr = IDXGIFactory_EnumAdapters(factory, adapter_index, &adapter)) == S_OK)
-    {
-        ERR("before getdesc\n");
-        hr = IDXGIAdapter_GetDesc(adapter, &desc);
-        ERR("after getdesc\n");
-        if (hr != S_OK) {
-            ERR("Got unexpected hr %#lx.\n", hr);
-        }
+    /*if ( SpoutDXToCCheckTextureAccess(spout) ) {
+        WARN("DX Texture access confirmed\n");
+    } else {
+        WARN("DX Texture access failed\n");
     }
 
+    if (SpoutDXToCAllowTextureAccess(spout)) {
+        WARN("DX Texture access allowedd\n");
+    } else {
+        WARN("DX Texture access not allowed\n");
+    }*/
+
     
-    ID3D11Texture2D* pTexture2D;
-    hr = pDevice->OpenSharedResource(share_handle, __uuidof(ID3D11Texture2D), (void**)&pTexture2D);
+    /*
 
 
-    D3DKMT_OPENADAPTERFROMLUID openAdapterDesc = {0};
-    DISPLAY_DEVICEW dd;
+    WARN("Try update texture");
+    if (SpoutDXToCUpdateDXTexture(spout, &info)) {
+        WARN("updated texture\n");
+    } else {
+        WARN("failed to update texture\n");
+    }
+    */
+
     
-    D3DKMT_CREATEDEVICE createDeviceDesc = {};
-    D3DKMT_OPENRESOURCE openResourceDesc = {};
-
-
-    memset(&dd, 0, sizeof (dd));
-    dd.cb = sizeof dd;
-    
-    openAdapterDesc.AdapterLuid = desc.AdapterLuid;
-
-    status = D3DKMTOpenAdapterFromLuid(&openAdapterDesc);
-
-    if (!NT_SUCCESS(status)) {
-        ERR("D3DKMTOpenAdapterFromDeviceName failed: 0x%ld\n", status);
-        return ret;
-    }
-
-    D3DKMT_HANDLE hAdapter = openAdapterDesc.hAdapter;
-    TRACE("Adapter opened successfully: 0x%X\n", hAdapter);
-
-    // Step 2: Create a device on the adapter
-    createDeviceDesc.hAdapter = hAdapter;
-    createDeviceDesc.Flags.LegacyMode = FALSE;
-    createDeviceDesc.Flags.DisableGpuTimeout = FALSE;
-
-    status = D3DKMTCreateDevice(&createDeviceDesc);
-    if (!NT_SUCCESS(status)) {
-        ERR("D3DKMTCreateDevice failed: 0x%ld\n", status);
-        D3DKMT_CLOSEADAPTER closeAdapterDesc = { hAdapter };
-        D3DKMTCloseAdapter(&closeAdapterDesc);
-        return ret;
-    }
-
-    D3DKMT_HANDLE hDevice = createDeviceDesc.hDevice;
-    TRACE("Device created successfully: 0x%X\n", hDevice);
-
-    // Step 3: Open the shared resource
-    openResourceDesc.hDevice = hDevice;
-    openResourceDesc.hGlobalShare = HandleToLong(share_handle);
-    ERR("D3DKMTOpenResource share_handle: 0x%ld\n", share_handle);
-
-    status = D3DKMTOpenResource(&openResourceDesc);
-    if (!NT_SUCCESS(status)) {
-        ERR("D3DKMTOpenResource failed: 0x%ld\n", status);
-        D3DKMT_DESTROYDEVICE destroyDeviceDesc = { hDevice };
-        D3DKMTDestroyDevice(&destroyDeviceDesc);
-        D3DKMT_CLOSEADAPTER closeAdapterDesc = { hAdapter };
-        D3DKMTCloseAdapter(&closeAdapterDesc);
-        return ret;
-    }
-
-    HANDLE memhandle = NULL;
-    
-    spoutDirectX::OpenDX11shareHandle(g_pd3dDevice, &g_pSenderTexture, g_dxShareHandle);
-    printf("Resource opened successfully: 0x%X\n", openResourceDesc.hResource);
-
-    if (memhandle == INVALID_HANDLE_VALUE) {
-        ret.flags |= RECEIVER_TEXTURE_INVALID;
-        WARN("Share handle open failed\n");
-        return ret;
-    }
-
-    TRACE("Share handle opened: 0x%lx -> 0x%lx\n", HandleToLong(share_handle),
-          HandleToLong(memhandle));
+/*
+    receiver->info.shared_handle = info.shareHandle;
+    receiver->info.width = info.width;
+    receiver->info.height = info.height;
+    receiver->info.format = info.format;
+    receiver->info.usage = info.usage;
+    receiver->info.adapterId = info.adapterId;*/
 
     Sleep(50);
-
     
-
     if (!SpoutDXToCGetSenderInfo(spout, &info) ||
-        info.shareHandle != share_handle) {
+        (HANDLE)(LongToHandle((long)(info.shareHandle))) != share_handle) {
         WARN("Texture changed out under us, trying again later (0x%lx -> "
              "0x%lx)\n",
-             HandleToLong(share_handle), HandleToLong(info.shareHandle));
+             HandleToLong(share_handle), (long)(info.shareHandle));
         ret.flags |= RECEIVER_TEXTURE_INVALID;
-        NtClose(share_handle);
         return ret;
     }
-
-    ret.width = info.width;
-    ret.height = info.height;
-    ret.format = info.format;
-    ret.usage = info.usage;
 
     TRACE("Update DX Texture\n");
     if (!SpoutDXToCUpdateDXTexture(spout, &info)) {
@@ -439,82 +314,49 @@ static struct source_info get_receiver_info(struct receiver *receiver) {
         return ret;
     }
 
-    uint32_t ret_size;
-    struct DxvkSharedTextureMetadata metadata;
+    ID3D11Texture2D* sharedTextue = NULL;
 
-    if (get_shared_metadata(memhandle, &metadata, sizeof(metadata),
-                            &ret_size) != STATUS_SUCCESS) {
-        TRACE("-> metadata failed\n");
-        goto no_metadata;
+    if (SpoutDXToCGetTexture(spout, (LONG_PTR **)&sharedTextue)) {
+        WARN("Got texture: %lx\n", PtrToUlong(sharedTextue));
+    } else {
+        WARN("Failed to get texture\n");
     }
 
-    if (ret_size != sizeof(metadata)) {
-        ERR("Metadata size mismatch, expected 0x%x, got 0x%x\n",
-            (int)sizeof(metadata), ret_size);
-        goto no_metadata;
-    }
+    D3D11_TEXTURE2D_DESC pDesc;
+    sharedTextue->lpVtbl->GetDesc(sharedTextue, &pDesc);
+    WARN("bind desc: %dx\n", pDesc.BindFlags);
 
-    TRACE("DX texture metadata:\n");
-    TRACE("Width          = %d\n", metadata.Width);
-    TRACE("Height         = %d\n", metadata.Height);
-    TRACE("MipLevels      = %d\n", metadata.MipLevels);
-    TRACE("ArraySize      = %d\n", metadata.ArraySize);
-    TRACE("Format         = %d\n", metadata.Format);
-    TRACE("SampleDesc     = %d, %d\n", metadata.SampleDesc.Count,
-          metadata.SampleDesc.Quality);
-    TRACE("Usage          = %d\n", metadata.Usage);
-    TRACE("BindFlags      = 0x%x\n", metadata.BindFlags);
-    TRACE("CPUAccessFlags = 0x%x\n", metadata.CPUAccessFlags);
-    TRACE("MiscFlags      = 0x%x\n", metadata.MiscFlags);
-    TRACE("TextureLayout  = %d\n", metadata.TextureLayout);
+    ret.shared_handle = info.shareHandle;
+    ret.bind_flags = pDesc.BindFlags;
+    ret.width = pDesc.Width;
+    ret.height = pDesc.Height;
+    ret.usage = pDesc.Usage;
+    ret.format = pDesc.Format;
 
-    // Sanity check
-    if (!metadata.Width || !metadata.Height) {
-        ERR("Metadata is invalid\n");
-        goto no_metadata;
-    }
+    
+    /*
+    IDXGIResource* dxgiResource = NULL;
+    HANDLE resharedHandle = NULL;
 
-    ret.width = metadata.Width;
-    ret.height = metadata.Height;
-    ret.format = metadata.Format;
-    ret.bind_flags = metadata.BindFlags;
-
-    struct shared_resource_info shared_resource_info;
-
-no_metadata:
-    if (get_shared_info(share_handle, &shared_resource_info)) {
-        TRACE("-> info failed\n");
-        goto no_resource_size;
-    }
-
-    TRACE("Resource Size  = 0x%llx\n",
-          (long long)shared_resource_info.resource_size);
-
-    ret.resource_size = shared_resource_info.resource_size;
-
-no_resource_size:
-    if (NtDeviceIoControlFile(share_handle, NULL, NULL, NULL, &iosb,
-                              IOCTL_SHARED_GPU_RESOURCE_GET_UNIX_RESOURCE, NULL,
-                              0, &unix_resource, sizeof(unix_resource))) {
-        ret.flags |= RECEIVER_TEXTURE_INVALID;
-        TRACE("-> kmt handle failed\n");
-        NtClose(share_handle);
+    HRESULT hr = ID3D11Texture2D_QueryInterface(sharedTextue, &IID_IDXGIResource1, (void**)&dxgiResource);
+    if (FAILED(hr)) {
+        ERR("Failed to query IDXGIResource.\n");
         return ret;
     }
 
-    status = wine_server_handle_to_fd(wine_server_ptr_handle(unix_resource),
-                                      GENERIC_ALL, &fd, NULL);
-    NtClose(wine_server_ptr_handle(unix_resource));
-    NtClose(share_handle);
-    if (status != STATUS_SUCCESS) {
-        ret.flags |= RECEIVER_TEXTURE_INVALID;
-        TRACE("-> failed to convert handle to fd\n");
+
+    // Retrieve the NT handle required for Vulkan interoperability
+    hr = IDXGIResource_GetSharedHandle(dxgiResource, &resharedHandle);
+    
+    IDXGIResource_Release(dxgiResource);
+    
+    if (FAILED(hr)) {
+        ERR("Failed to create shared NT handle.\n");
         return ret;
     }
 
-    TRACE("New texture OPAQUE fd: %d\n", fd);
+    ret.shared_handle = HandleToLong(resharedHandle);*/
 
-    ret.opaque_fd = fd;
     ret.flags |= RECEIVER_TEXTURE_UPDATED;
     receiver->force_update = false;
 
@@ -525,6 +367,7 @@ static void update_receiver(struct receiver *receiver) {
     struct source_info new_info = get_receiver_info(receiver);
 
     if (!receiver->source) {
+        WARN("no receiver source\n");
         if (new_info.flags == RECEIVER_TEXTURE_UPDATED) {
             struct create_source_params params = {
                 .sender_name = receiver->name,
@@ -548,6 +391,7 @@ static void update_receiver(struct receiver *receiver) {
 
     if (new_info.flags != receiver->info.flags ||
         (new_info.flags & RECEIVER_TEXTURE_UPDATED)) {
+        WARN("new info flags no matchy\n");
         struct update_source_params params = {
             .source = receiver->source,
             .info = new_info,

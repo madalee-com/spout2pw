@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <vulkan/vulkan.h>
 
 #include <funnel-vk.h>
 #include <funnel.h>
@@ -15,6 +14,8 @@
 #include "spout2pw_unix.h"
 #include "wine/debug.h"
 #include <ntstatus.h>
+#include <ddk/d3dkmthk.h>
+#include "dxgi1_6.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
@@ -42,6 +43,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_win32.h>
 
 #define CHECK_VK_RESULT(_expr)                                                 \
     result = _expr;                                                            \
@@ -210,7 +212,7 @@ pthread_mutex_t vk_lock;
 struct {
     PFN_vkGetMemoryFdPropertiesKHR vkGetMemoryFdPropertiesKHR;
     PFN_vkGetImageMemoryRequirements2KHR vkGetImageMemoryRequirements2KHR;
-
+    PFN_vkGetMemoryWin32HandlePropertiesKHR vkGetMemoryWin32HandlePropertiesKHR;
 } vk;
 
 static VkBool32
@@ -284,7 +286,6 @@ static NTSTATUS startup(void *args) {
         createInfo.pApplicationInfo = &appInfo;
         createInfo.enabledExtensionCount = ARRAY_SIZE(instanceExtensionNames);
         createInfo.ppEnabledExtensionNames = instanceExtensionNames;
-
         size_t foundLayers = 0;
 
         uint32_t deviceLayerCount;
@@ -527,6 +528,10 @@ static NTSTATUS startup(void *args) {
             (PFN_vkGetMemoryFdPropertiesKHR)vkGetDeviceProcAddr(
                 device, "vkGetMemoryFdPropertiesKHR");
 
+        vk.vkGetMemoryWin32HandlePropertiesKHR =
+            (PFN_vkGetMemoryWin32HandlePropertiesKHR)vkGetDeviceProcAddr(
+                device, "vkGetMemoryWin32HandlePropertiesKHR");
+
         vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
     }
 
@@ -761,6 +766,8 @@ static struct format_alpha dx_to_vkformat(uint32_t format) {
 
 static int import_texture(struct source *source) {
     VkResult result;
+    WARN("import texture\n");
+/*
     int fd = -1;
 
     if (source->info.opaque_fd < 0)
@@ -770,25 +777,54 @@ static int import_texture(struct source *source) {
         close(source->cur_fd);
         source->cur_fd = -1;
     }
+*/
+   /* DXGI_ADAPTER_DESC device_adapter_desc, desc;
+    IDXGIAdapter *adapter;
+    IDXGIFactory *factory;
+    HRESULT hr;
 
+    ERR("before create factory\n");
+    hr = CreateDXGIFactory(&IID_IDXGIFactory, (void **)&factory);
+    if (hr != S_OK) {
+        ERR("Got unexpected hr %#d.\n", hr);
+    }
+    ERR("after create factory\n");
+
+    unsigned int adapter_index = 0;
+    
+    if ((hr = factory->lpVtbl->EnumAdapters(factory, adapter_index, &adapter)) == S_OK)
+    {
+        ERR("before getdesc\n");
+        //hr = IDXGIAdapter_GetDesc(adapter, &desc);
+        ERR("after getdesc\n");
+        //if (hr != S_OK) {
+        //    ERR("Got unexpected hr %#lx.\n", hr);
+        //}
+    }*/
+    
+    /*
     fd = fcntl(source->info.opaque_fd, F_DUPFD_CLOEXEC, 3);
     if (fd < 0)
         return -EINVAL;
+    
 
     source->cur_fd = source->info.opaque_fd;
     source->info.opaque_fd = -1;
+    
 
     TRACE("Importing OPAQUE FD %d -> %d (%dx%d)\n", source->cur_fd, fd,
           source->info.width, source->info.height);
-
+*/
     struct format_alpha fmt_alpha = dx_to_vkformat(source->info.format);
 
     if (fmt_alpha.format == VK_FORMAT_UNDEFINED)
         goto err_close;
+    
 
-    VkExternalMemoryImageCreateInfo create_info = {
-        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
-        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+    VkExternalMemoryImageCreateInfoKHR create_info = {
+        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
+        .pNext = NULL,
+        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,
     };
 
     VkImageCreateInfo info = {
@@ -799,7 +835,7 @@ static int import_texture(struct source *source) {
         .extent = (VkExtent3D){source->info.width, source->info.height, 1},
         .mipLevels = 1,
         .arrayLayers = 1,
-        .samples = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage =
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -820,19 +856,58 @@ static int import_texture(struct source *source) {
     if (source->info.bind_flags & D3D11_BIND_UNORDERED_ACCESS)
         info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 
+    WARN("before vkCreateImage\n");
     CHECK_VK_RESULT(vkCreateImage(device, &info, NULL, &source->image)) {
         goto err_close;
     }
+
+    WARN("before vkGetImageMemoryRequirements\n");
+    VkMemoryRequirements2 mem_reqs = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+    };
 
     const VkImageMemoryRequirementsInfo2 mem_reqs_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
         .image = source->image,
     };
-    VkMemoryRequirements2 mem_reqs = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+    vk.vkGetImageMemoryRequirements2KHR(device, &mem_reqs_info, &mem_reqs);
+    
+    
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    vkGetPhysicalDeviceMemoryProperties(physDevice, &memoryProperties);
+
+    WARN("before preferredMemoryTypeBits\n");
+    preferredMemoryTypeBits = 0;
+    /*for (int i = 0; i < memoryProperties.memoryTypeCount; i++) {
+        if (memoryProperties.memoryTypes[i].propertyFlags &
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+            preferredMemoryTypeBits |= 1L << i;
+    }*/
+    uint32_t memoryTypeIndex = UINT32_MAX;
+    uint32_t matchFlags = mem_reqs.memoryRequirements.memoryTypeBits;
+    
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
+        if ((matchFlags & (1 << i)) && 
+            (memoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+            memoryTypeIndex = i;
+            break;
+        }
+    }
+
+    if (memoryTypeIndex == UINT32_MAX) {
+        ERR("Failed to find compatible memory type.\n");
+        goto err_close;
+    }
+
+
+    // Import the DirectX shared handle
+    VkImportMemoryWin32HandleInfoKHR importMemoryInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR,
+        .pNext = NULL,
+        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT_KHR,
+        .handle = (HANDLE)(LongToHandle((long)(source->info.shared_handle)))
     };
 
-    vk.vkGetImageMemoryRequirements2KHR(device, &mem_reqs_info, &mem_reqs);
 
     uint32_t memory_type_bits = mem_reqs.memoryRequirements.memoryTypeBits;
 
@@ -848,33 +923,31 @@ static int import_texture(struct source *source) {
         goto err_close;
     }
 
-    VkImportMemoryFdInfoKHR memory_fd_info = {
-        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
-        .fd = fd,
-        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+    VkMemoryAllocateInfo allocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = &importMemoryInfo,
+        .allocationSize = mem_reqs.memoryRequirements.size,
+        .memoryTypeIndex = ffs(memory_type_bits) - 1
     };
 
-    VkMemoryAllocateInfo allocate_info = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = &memory_fd_info,
-        .allocationSize = mem_reqs.memoryRequirements.size,
-        .memoryTypeIndex = ffs(memory_type_bits) - 1,
-    };
 
     if (source->info.resource_size) {
-        if (allocate_info.allocationSize != source->info.resource_size) {
+        if (allocateInfo.allocationSize != source->info.resource_size) {
             ERR("resource size mismatch!");
         }
-        allocate_info.allocationSize = source->info.resource_size;
+        allocateInfo.allocationSize = source->info.resource_size;
     }
 
+    WARN("before vkAllocateMemory\n");
     CHECK_VK_RESULT(
-        vkAllocateMemory(device, &allocate_info, NULL, &source->mem)) {
+        vkAllocateMemory(device, &allocateInfo, NULL, &source->mem)) {
         goto err_close;
     }
-    fd = -1;
+    //fd = -1;
 
+    WARN("before vkBindImageMemory\n");
     CHECK_VK_RESULT(vkBindImageMemory(device, source->image, source->mem, 0)) {
+        ERR("some other err\n");
         return -EINVAL;
     }
 
@@ -883,11 +956,12 @@ static int import_texture(struct source *source) {
     return 0;
 
 err_close:
-    if (source->cur_fd != -1)
+    /*if (source->cur_fd != -1)
         close(source->cur_fd);
     source->cur_fd = -1;
     if (fd != -1)
-        close(fd);
+        close(fd);*/
+    ERR("some err\n");
     return -EINVAL;
 }
 
@@ -977,6 +1051,7 @@ static NTSTATUS run_source(void *args) {
             goto cont;
         }
 
+        WARN("b4 funnel_buffer_get_vk_fence\n");
         VkFence fence;
         ret = funnel_buffer_get_vk_fence(buf, &fence);
         if (ret) {
@@ -985,6 +1060,7 @@ static NTSTATUS run_source(void *args) {
             goto cont;
         }
 
+        WARN("b4 funnel_buffer_get_vk_image\n");
         VkImage image;
         ret = funnel_buffer_get_vk_image(buf, &image);
         if (ret) {
@@ -998,6 +1074,7 @@ static NTSTATUS run_source(void *args) {
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        WARN("b4 vkBeginCommandBuffer\n");
         CHECK_VK_RESULT(
             vkBeginCommandBuffer(source->commandBuffer, &beginInfo)) {
             ERR("Failed to init command buffer\n");
@@ -1032,6 +1109,7 @@ static NTSTATUS run_source(void *args) {
                 },
         };
 
+        WARN("b4 vkCmdPipelineBarrier\n");
         vkCmdPipelineBarrier(source->commandBuffer,
                              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
                              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, NULL, 0,
@@ -1056,11 +1134,13 @@ static NTSTATUS run_source(void *args) {
             .dstOffsets = {{0, 0, 0}, {bwidth, bheight, 1}},
         };
 
+        WARN("b4 vkCmdBlitImage\n");
         vkCmdBlitImage(source->commandBuffer, source->image,
                        VK_IMAGE_LAYOUT_GENERAL, image,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region,
                        VK_FILTER_NEAREST);
 
+        WARN("b4 vkEndCommandBuffer\n");
         CHECK_VK_RESULT(vkEndCommandBuffer(source->commandBuffer)) {
             ERR("Failed to end command buffer\n");
             funnel_stream_return(source->stream, buf);
@@ -1080,6 +1160,7 @@ static NTSTATUS run_source(void *args) {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = &release;
 
+        WARN("b4 lock_texture_return\n");
         struct lock_texture_return *ltex = lock_texture(source->receiver);
 
         if (!ltex) {
