@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
+//
 
 #include <funnel-vk.h>
 #include <funnel.h>
@@ -14,8 +15,6 @@
 #include "spout2pw_unix.h"
 #include "wine/debug.h"
 #include <ntstatus.h>
-#include <ddk/d3dkmthk.h>
-#include "dxgi1_6.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
@@ -43,7 +42,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan_win32.h>
 
 #define CHECK_VK_RESULT(_expr)                                                 \
     result = _expr;                                                            \
@@ -90,6 +88,60 @@ struct source {
     bool update;
     bool dead;
 };
+
+struct vulkan_client_object {
+    uint64_t loader_magic;
+    uint64_t unix_handle; // Points to the Unix side 'vulkan_instance' struct
+};
+
+struct vulkan_instance {
+    uint64_t
+        host_handle; // <-- THIS is the real native Linux VkInstance handle!
+    uint64_t client_handle;
+};
+
+struct vulkan_physical_device {
+    uint64_t
+        host_handle; // <-- THIS is the real native Linux VkInstance handle!
+    uint64_t client_handle;
+};
+
+struct vulkan_device {
+    uint64_t
+        host_handle; // <-- THIS is the real native Linux VkInstance handle!
+    uint64_t client_handle;
+};
+
+struct vulkan_image {
+    uint64_t
+        host_handle; // <-- THIS is the real native Linux VkInstance handle!
+    uint64_t client_handle;
+};
+
+static inline struct vulkan_instance *
+vulkan_instance_from_handle(VkInstance handle) {
+    struct vulkan_client_object *client = (struct vulkan_client_object *)handle;
+    return (struct vulkan_instance *)(UINT_PTR)client->unix_handle;
+}
+
+static inline struct vulkan_physical_device *
+vulkan_physical_device_from_handle(VkPhysicalDevice handle) {
+    struct vulkan_client_object *client = (struct vulkan_client_object *)handle;
+    return (struct vulkan_physical_device *)(UINT_PTR)client->unix_handle;
+}
+
+static inline struct vulkan_device *vulkan_device_from_handle(VkDevice handle) {
+    struct vulkan_client_object *client = (struct vulkan_client_object *)handle;
+    return (struct vulkan_device *)(UINT_PTR)client->unix_handle;
+}
+
+static inline struct vulkan_image *vulkan_image_from_handle(VkImage handle) {
+    struct vulkan_client_object *client = (struct vulkan_client_object *)handle;
+    return (struct vulkan_image *)(UINT_PTR)client->unix_handle;
+}
+
+extern NTSTATUS wine_server_handle_to_fd(HANDLE handle, unsigned int access,
+                                         int *fd, unsigned int *options);
 
 static NTSTATUS errno_to_status(int err) {
     WINE_TRACE("errno = %d\n", err);
@@ -212,7 +264,7 @@ pthread_mutex_t vk_lock;
 struct {
     PFN_vkGetMemoryFdPropertiesKHR vkGetMemoryFdPropertiesKHR;
     PFN_vkGetImageMemoryRequirements2KHR vkGetImageMemoryRequirements2KHR;
-    PFN_vkGetMemoryWin32HandlePropertiesKHR vkGetMemoryWin32HandlePropertiesKHR;
+
 } vk;
 
 static VkBool32
@@ -286,6 +338,7 @@ static NTSTATUS startup(void *args) {
         createInfo.pApplicationInfo = &appInfo;
         createInfo.enabledExtensionCount = ARRAY_SIZE(instanceExtensionNames);
         createInfo.ppEnabledExtensionNames = instanceExtensionNames;
+
         size_t foundLayers = 0;
 
         uint32_t deviceLayerCount;
@@ -348,33 +401,53 @@ static NTSTATUS startup(void *args) {
             free(ext_props);
         }
 
-        CHECK_VK_STARTUP(vkCreateInstance(&createInfo, NULL, &instance)) {
+        TRACE("About to test instance\n");
+        // 1. Cast the raw Windows handle pointer to Wine's true client-object
+        // tracking header
+        /*
+            struct vulkan_client_object* client_obj = (struct
+           vulkan_client_object*)params->vkInstance; if (!client_obj ||
+           !client_obj->unix_handle) { ERR("[-] Error: Invalid or unmapped
+           Windows Vulkan handle received.\n"); return STATUS_INVALID_PARAMETER;
+            }
+            struct vulkan_instance_unix* wine_inst = (struct
+           vulkan_instance_unix*)client_obj->unix_handle;
+        */
+
+        TRACE("About to set instance\n");
+        instance = (VkInstance)((vulkan_instance_from_handle(
+                                     (VkInstance)params->vkInstance))
+                                    ->host_handle);
+        /*CHECK_VK_STARTUP(vkCreateInstance(&createInfo, NULL, &instance)) {
             return STATUS_FATAL_APP_EXIT;
-        }
+        }*/
+        TRACE("Did set instance\n");
     }
+    /*
+        {
+            VkDebugUtilsMessengerCreateInfoEXT createInfo = {0};
+            createInfo.sType =
+                VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            createInfo.messageSeverity =
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            createInfo.messageType =
+                VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            createInfo.pfnUserCallback = vulkan_message;
 
-    {
-        VkDebugUtilsMessengerCreateInfoEXT createInfo = {0};
-        createInfo.sType =
-            VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        createInfo.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        createInfo.messageType =
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        createInfo.pfnUserCallback = vulkan_message;
-
-        CHECK_VK_STARTUP(GET_EXTENSION_FUNCTION(vkCreateDebugUtilsMessengerEXT)(
-            instance, &createInfo, NULL, &debugMessenger)) {
-            return STATUS_FATAL_APP_EXIT;
+            CHECK_VK_STARTUP(GET_EXTENSION_FUNCTION(vkCreateDebugUtilsMessengerEXT)(
+                instance, &createInfo, NULL, &debugMessenger)) {
+                return STATUS_FATAL_APP_EXIT;
+            }
         }
-    }
-
+    */
+    TRACE("Try enumerate phys device\n");
     uint32_t physDeviceCount;
     vkEnumeratePhysicalDevices(instance, &physDeviceCount, NULL);
+    TRACE("Enumerated phys device\n");
 
     VkPhysicalDevice physDevices[physDeviceCount];
     vkEnumeratePhysicalDevices(instance, &physDeviceCount, physDevices);
@@ -414,6 +487,10 @@ static NTSTATUS startup(void *args) {
             bestScore = score;
         }
     }
+
+    physDevice = (VkPhysicalDevice)((vulkan_physical_device_from_handle(
+                                         (VkPhysicalDevice)params->vkPhysDev))
+                                        ->host_handle);
 
     {
         uint32_t queueFamilyCount;
@@ -510,10 +587,13 @@ static NTSTATUS startup(void *args) {
             free(ext_props);
         }
 
-        CHECK_VK_STARTUP(
+        /*CHECK_VK_STARTUP(
             vkCreateDevice(physDevice, &createInfo, NULL, &device)) {
             return STATUS_FATAL_APP_EXIT;
-        }
+        }*/
+        device =
+            (VkDevice)((vulkan_device_from_handle((VkDevice)params->vkDevice))
+                           ->host_handle);
 
         vk.vkGetImageMemoryRequirements2KHR =
             (PFN_vkGetImageMemoryRequirements2KHR)vkGetDeviceProcAddr(
@@ -527,10 +607,6 @@ static NTSTATUS startup(void *args) {
         vk.vkGetMemoryFdPropertiesKHR =
             (PFN_vkGetMemoryFdPropertiesKHR)vkGetDeviceProcAddr(
                 device, "vkGetMemoryFdPropertiesKHR");
-
-        vk.vkGetMemoryWin32HandlePropertiesKHR =
-            (PFN_vkGetMemoryWin32HandlePropertiesKHR)vkGetDeviceProcAddr(
-                device, "vkGetMemoryWin32HandlePropertiesKHR");
 
         vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
     }
@@ -653,10 +729,22 @@ static NTSTATUS create_source(void *args) {
         goto free_stream;
 
     bool have_format = false;
+    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, true,
+                                      VK_FORMAT_FEATURE_BLIT_DST_BIT);
+    have_format |= ret == 0;
+    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, true,
+                                      VK_FORMAT_FEATURE_BLIT_DST_BIT);
+    have_format |= ret == 0;
     ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_SRGB, true,
                                       VK_FORMAT_FEATURE_BLIT_DST_BIT);
     have_format |= ret == 0;
-    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_B8G8R8A8_SRGB, true,
+    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_SRGB, true,
+                                      VK_FORMAT_FEATURE_BLIT_DST_BIT);
+    have_format |= ret == 0;
+    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, false,
+                                      VK_FORMAT_FEATURE_BLIT_DST_BIT);
+    have_format |= ret == 0;
+    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, false,
                                       VK_FORMAT_FEATURE_BLIT_DST_BIT);
     have_format |= ret == 0;
     ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_SRGB, false,
@@ -705,9 +793,9 @@ static void free_texture(struct source *source) {
     if (source->image != VK_NULL_HANDLE)
         vkDestroyImage(device, source->image, NULL);
     source->image = VK_NULL_HANDLE;
-    if (source->mem != VK_NULL_HANDLE)
+    /*if (source->mem != VK_NULL_HANDLE)
         vkFreeMemory(device, source->mem, NULL);
-    source->mem = VK_NULL_HANDLE;
+    source->mem = VK_NULL_HANDLE;*/
 
     if (source->cur_fd != -1) {
         close(source->cur_fd);
@@ -766,65 +854,43 @@ static struct format_alpha dx_to_vkformat(uint32_t format) {
 
 static int import_texture(struct source *source) {
     VkResult result;
-    WARN("import texture\n");
-/*
     int fd = -1;
 
-    if (source->info.opaque_fd < 0)
+    if (source->info.vk_image < 0)
         return -EINVAL;
+
+    struct format_alpha fmt_alpha = dx_to_vkformat(source->info.format);
+    
+    TRACE("Texture import pre\n");
+    source->image = (VkImage)source->info.vk_image;
+    TRACE("Texture import 'OK'\n");
+    return 0;
+
+    /*
 
     if (source->cur_fd != -1) {
         close(source->cur_fd);
         source->cur_fd = -1;
     }
-*/
-   /* DXGI_ADAPTER_DESC device_adapter_desc, desc;
-    IDXGIAdapter *adapter;
-    IDXGIFactory *factory;
-    HRESULT hr;
 
-    ERR("before create factory\n");
-    hr = CreateDXGIFactory(&IID_IDXGIFactory, (void **)&factory);
-    if (hr != S_OK) {
-        ERR("Got unexpected hr %#d.\n", hr);
-    }
-    ERR("after create factory\n");
-
-    unsigned int adapter_index = 0;
-    
-    if ((hr = factory->lpVtbl->EnumAdapters(factory, adapter_index, &adapter)) == S_OK)
-    {
-        ERR("before getdesc\n");
-        //hr = IDXGIAdapter_GetDesc(adapter, &desc);
-        ERR("after getdesc\n");
-        //if (hr != S_OK) {
-        //    ERR("Got unexpected hr %#lx.\n", hr);
-        //}
-    }*/
-    
-    /*
     fd = fcntl(source->info.opaque_fd, F_DUPFD_CLOEXEC, 3);
     if (fd < 0)
         return -EINVAL;
-    
 
     source->cur_fd = source->info.opaque_fd;
     source->info.opaque_fd = -1;
-    
 
     TRACE("Importing OPAQUE FD %d -> %d (%dx%d)\n", source->cur_fd, fd,
           source->info.width, source->info.height);
-*/
+
     struct format_alpha fmt_alpha = dx_to_vkformat(source->info.format);
 
     if (fmt_alpha.format == VK_FORMAT_UNDEFINED)
         goto err_close;
-    
 
-    VkExternalMemoryImageCreateInfoKHR create_info = {
-        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
-        .pNext = NULL,
-        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,
+    VkExternalMemoryImageCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
     };
 
     VkImageCreateInfo info = {
@@ -835,134 +901,98 @@ static int import_texture(struct source *source) {
         .extent = (VkExtent3D){source->info.width, source->info.height, 1},
         .mipLevels = 1,
         .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .samples = 1,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage =
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
-
+*/
     /**
      * Extends the usage of the image based on DirectX bind flags.
      * This maters on NVIDIA proprietary drivers on pre-Turing GPUs as this
      * seems to have interactions with caches. This follows
      * https://github.com/doitsujin/dxvk/blob/0bf876eb96767b3548aff3b27985f08d819bcd99/src/d3d11/d3d11_texture.cpp#L96
      */
-    if (source->info.bind_flags & D3D11_BIND_SHADER_RESOURCE)
-        info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    if (source->info.bind_flags & D3D11_BIND_RENDER_TARGET)
-        info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (source->info.bind_flags & D3D11_BIND_UNORDERED_ACCESS)
-        info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+    /*
+        if (source->info.bind_flags & D3D11_BIND_SHADER_RESOURCE)
+            info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        if (source->info.bind_flags & D3D11_BIND_RENDER_TARGET)
+            info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if (source->info.bind_flags & D3D11_BIND_UNORDERED_ACCESS)
+            info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 
-    WARN("before vkCreateImage\n");
-    CHECK_VK_RESULT(vkCreateImage(device, &info, NULL, &source->image)) {
-        goto err_close;
-    }
-
-    WARN("before vkGetImageMemoryRequirements\n");
-    VkMemoryRequirements2 mem_reqs = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
-    };
-
-    const VkImageMemoryRequirementsInfo2 mem_reqs_info = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
-        .image = source->image,
-    };
-    vk.vkGetImageMemoryRequirements2KHR(device, &mem_reqs_info, &mem_reqs);
-    
-    
-    VkPhysicalDeviceMemoryProperties memoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(physDevice, &memoryProperties);
-
-    WARN("before preferredMemoryTypeBits\n");
-    preferredMemoryTypeBits = 0;
-    /*for (int i = 0; i < memoryProperties.memoryTypeCount; i++) {
-        if (memoryProperties.memoryTypes[i].propertyFlags &
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-            preferredMemoryTypeBits |= 1L << i;
-    }*/
-    uint32_t memoryTypeIndex = UINT32_MAX;
-    uint32_t matchFlags = mem_reqs.memoryRequirements.memoryTypeBits;
-    
-    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
-        if ((matchFlags & (1 << i)) && 
-            (memoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-            memoryTypeIndex = i;
-            break;
+        CHECK_VK_RESULT(vkCreateImage(device, &info, NULL, source->image)) {
+            goto err_close;
         }
-    }
 
-    if (memoryTypeIndex == UINT32_MAX) {
-        ERR("Failed to find compatible memory type.\n");
-        goto err_close;
-    }
+        const VkImageMemoryRequirementsInfo2 mem_reqs_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
+            .image = *source->image,
+        };
+        VkMemoryRequirements2 mem_reqs = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+        };
 
+        vk.vkGetImageMemoryRequirements2KHR(device, &mem_reqs_info, &mem_reqs);
 
-    // Import the DirectX shared handle
-    VkImportMemoryWin32HandleInfoKHR importMemoryInfo = {
-        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR,
-        .pNext = NULL,
-        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT_KHR,
-        .handle = (HANDLE)(LongToHandle((long)(source->info.shared_handle)))
-    };
+        uint32_t memory_type_bits = mem_reqs.memoryRequirements.memoryTypeBits;
 
+        if (preferredMemoryTypeBits & memory_type_bits)
+            memory_type_bits &= preferredMemoryTypeBits;
 
-    uint32_t memory_type_bits = mem_reqs.memoryRequirements.memoryTypeBits;
+        TRACE("Memory type bits: required=0x%x, preferred=0x%x, choices=0x%x\n",
+              mem_reqs.memoryRequirements.memoryTypeBits,
+    preferredMemoryTypeBits, memory_type_bits);
 
-    if (preferredMemoryTypeBits & memory_type_bits)
-        memory_type_bits &= preferredMemoryTypeBits;
-
-    TRACE("Memory type bits: required=0x%x, preferred=0x%x, choices=0x%x\n",
-          mem_reqs.memoryRequirements.memoryTypeBits, preferredMemoryTypeBits,
-          memory_type_bits);
-
-    if (!memory_type_bits) {
-        ERR("No valid memory type\n");
-        goto err_close;
-    }
-
-    VkMemoryAllocateInfo allocateInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = &importMemoryInfo,
-        .allocationSize = mem_reqs.memoryRequirements.size,
-        .memoryTypeIndex = ffs(memory_type_bits) - 1
-    };
-
-
-    if (source->info.resource_size) {
-        if (allocateInfo.allocationSize != source->info.resource_size) {
-            ERR("resource size mismatch!");
+        if (!memory_type_bits) {
+            ERR("No valid memory type\n");
+            goto err_close;
         }
-        allocateInfo.allocationSize = source->info.resource_size;
-    }
 
-    WARN("before vkAllocateMemory\n");
-    CHECK_VK_RESULT(
-        vkAllocateMemory(device, &allocateInfo, NULL, &source->mem)) {
-        goto err_close;
-    }
-    //fd = -1;
+        VkImportMemoryFdInfoKHR memory_fd_info = {
+            .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
+            .fd = fd,
+            .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+        };
 
-    WARN("before vkBindImageMemory\n");
-    CHECK_VK_RESULT(vkBindImageMemory(device, source->image, source->mem, 0)) {
-        ERR("some other err\n");
+        VkMemoryAllocateInfo allocate_info = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext = &memory_fd_info,
+            .allocationSize = mem_reqs.memoryRequirements.size,
+            .memoryTypeIndex = ffs(memory_type_bits) - 1,
+        };
+
+        if (source->info.resource_size) {
+            if (allocate_info.allocationSize != source->info.resource_size) {
+                ERR("resource size mismatch!");
+            }
+            allocate_info.allocationSize = source->info.resource_size;
+        }
+
+        CHECK_VK_RESULT(
+            vkAllocateMemory(device, &allocate_info, NULL, &source->mem)) {
+            goto err_close;
+        }
+        fd = -1;
+
+        CHECK_VK_RESULT(vkBindImageMemory(device, *source->image, source->mem,
+    0)) { return -EINVAL;
+        }
+
+        TRACE("Texture import OK\n");
+
+        return 0;
+
+    err_close:
+        if (source->cur_fd != -1)
+            close(source->cur_fd);
+        source->cur_fd = -1;
+        if (fd != -1)
+            close(fd);
         return -EINVAL;
-    }
-
-    TRACE("Texture import OK\n");
-
-    return 0;
-
-err_close:
-    /*if (source->cur_fd != -1)
-        close(source->cur_fd);
-    source->cur_fd = -1;
-    if (fd != -1)
-        close(fd);*/
-    ERR("some err\n");
-    return -EINVAL;
+    */
 }
 
 static NTSTATUS run_source(void *args) {
@@ -985,7 +1015,7 @@ static NTSTATUS run_source(void *args) {
                 TRACE("run_source(): Inactive\n");
                 active = false;
             } else if (source->info.flags & RECEIVER_TEXTURE_UPDATED) {
-                free_texture(source);
+                // free_texture(source);
                 if (import_texture(source) == 0) {
                     ret = funnel_stream_set_size(source->stream,
                                                  source->info.width,
@@ -1051,7 +1081,6 @@ static NTSTATUS run_source(void *args) {
             goto cont;
         }
 
-        WARN("b4 funnel_buffer_get_vk_fence\n");
         VkFence fence;
         ret = funnel_buffer_get_vk_fence(buf, &fence);
         if (ret) {
@@ -1060,7 +1089,6 @@ static NTSTATUS run_source(void *args) {
             goto cont;
         }
 
-        WARN("b4 funnel_buffer_get_vk_image\n");
         VkImage image;
         ret = funnel_buffer_get_vk_image(buf, &image);
         if (ret) {
@@ -1069,18 +1097,19 @@ static NTSTATUS run_source(void *args) {
             goto cont;
         }
         assert(image);
+        TRACE("Got funnel buffer\n");
 
         VkCommandBufferBeginInfo beginInfo = {0};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        WARN("b4 vkBeginCommandBuffer\n");
         CHECK_VK_RESULT(
             vkBeginCommandBuffer(source->commandBuffer, &beginInfo)) {
             ERR("Failed to init command buffer\n");
             funnel_stream_return(source->stream, buf);
             goto cont;
         }
+        TRACE("Did init command buffer\n");
 
         /*
          * See: https://github.com/KhronosGroup/Vulkan-Docs/issues/2652
@@ -1088,6 +1117,7 @@ static NTSTATUS run_source(void *args) {
          * VK_QUEUE_FAMILY_EXTERNAL synchronizes with external producer
          * (though dxvk does not do the queue thing itself...)
          */
+        /*
         VkImageMemoryBarrier barrier = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -1109,11 +1139,11 @@ static NTSTATUS run_source(void *args) {
                 },
         };
 
-        WARN("b4 vkCmdPipelineBarrier\n");
+        TRACE("Setup CMD Pipeline Barrier\n");
         vkCmdPipelineBarrier(source->commandBuffer,
                              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
                              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, NULL, 0,
-                             NULL, 1, &barrier);
+                             NULL, 1, &barrier);*/
 
         VkImageBlit region = {
             .srcSubresource =
@@ -1134,18 +1164,19 @@ static NTSTATUS run_source(void *args) {
             .dstOffsets = {{0, 0, 0}, {bwidth, bheight, 1}},
         };
 
-        WARN("b4 vkCmdBlitImage\n");
+        TRACE("Before vkCmdBlitImage\n");
         vkCmdBlitImage(source->commandBuffer, source->image,
-                       VK_IMAGE_LAYOUT_GENERAL, image,
+                       VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, image,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region,
                        VK_FILTER_NEAREST);
+        TRACE("After vkCmdBlitImage\n");
 
-        WARN("b4 vkEndCommandBuffer\n");
         CHECK_VK_RESULT(vkEndCommandBuffer(source->commandBuffer)) {
             ERR("Failed to end command buffer\n");
             funnel_stream_return(source->stream, buf);
             goto cont;
         }
+        TRACE("After vkEndCommandBuffer\n");
 
         const VkPipelineStageFlags waitStage =
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -1160,7 +1191,6 @@ static NTSTATUS run_source(void *args) {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = &release;
 
-        WARN("b4 lock_texture_return\n");
         struct lock_texture_return *ltex = lock_texture(source->receiver);
 
         if (!ltex) {
@@ -1221,9 +1251,9 @@ static NTSTATUS run_source(void *args) {
 
     free_texture(source);
 
-    if (source->info.opaque_fd != -1) {
-        close(source->info.opaque_fd);
-        source->info.opaque_fd = -1;
+    if (source->info.vk_image != -1) {
+        // close(source->info.opaque_fd);
+        source->info.vk_image = -1;
     }
 
     TRACE("run_source(): Freeing command buffers\n");
@@ -1258,9 +1288,9 @@ static NTSTATUS update_source(void *args) {
         return STATUS_NO_SUCH_DEVICE;
     }
 
-    if (source->info.opaque_fd != -1) {
-        close(source->info.opaque_fd);
-        source->info.opaque_fd = -1;
+    if (source->info.vk_image != -1) {
+        // close(source->info.opaque_fd);
+        source->info.vk_image = -1;
     }
     source->info = params->info;
     source->update = true;

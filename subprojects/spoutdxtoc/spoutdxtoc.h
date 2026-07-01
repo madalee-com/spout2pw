@@ -1,6 +1,6 @@
 #pragma once
 
-#include <d3d11.h>
+//#include <d3d11.h>
 #include <d3d11_1.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,6 +36,7 @@ int SpoutDXToCGetSenderCount(SPOUTDXTOC_SENDERNAMES *self);
 
 bool SpoutDXToCGetSender(SPOUTDXTOC_SENDERNAMES *self, int64_t index,
                          char **sendername);
+bool SpoutDXToCGetDXDevice(SPOUTDXTOC_RECEIVER *self, ID3D11Device **hDX11Device);
 
 /* Returns a NULL-terminated list */
 char **SpoutDXToCGetSenderListSimple(SPOUTDXTOC_SENDERNAMES *self,
@@ -61,6 +62,8 @@ bool SpoutDXToCCheckTextureAccess(SPOUTDXTOC_RECEIVER *self);
 bool SpoutDXToCAllowTextureAccess(SPOUTDXTOC_RECEIVER *self);
 bool SpoutDXToCGetFrameCount(SPOUTDXTOC_RECEIVER *self, uint64_t *framecount);
 bool SpoutDXToCGetTexture(SPOUTDXTOC_RECEIVER *self, LONG_PTR **hSharedTexture);
+bool SpoutDXToCGetMappedTexture(SPOUTDXTOC_RECEIVER *self, LONG_PTR pMappedTexture);
+bool SpoutDXToCGetVulkanHandle(SPOUTDXTOC_RECEIVER *self, uint64_t *pVTexture);
 
 #ifdef __cplusplus
 }

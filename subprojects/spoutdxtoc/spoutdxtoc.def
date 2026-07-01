@@ -4,6 +4,7 @@ EXPORTS
     SpoutDXToCFreeSenderNames
     SpoutDXToCGetSenderCount
     SpoutDXToCGetSender
+    SpoutDXToCGetDXDevice
     SpoutDXToCGetSenderListSimple
     SpoutDXToCNamelistClear
     SpoutDXToCGetSenderList
@@ -16,3 +17,5 @@ EXPORTS
     SpoutDXToCAllowTextureAccess
     SpoutDXToCGetFrameCount
     SpoutDXToCGetTexture
+    SpoutDXToCGetMappedTexture
+    SpoutDXToCGetVulkanHandle

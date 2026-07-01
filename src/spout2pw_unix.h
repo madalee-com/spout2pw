@@ -55,9 +55,7 @@ struct source_info {
     uint32_t format;
     uint32_t usage;
     uint32_t bind_flags;
-    int32_t opaque_fd;
-    uint32_t shared_handle;
-    uint32_t adapterId;
+    uint64_t vk_image;
 };
 
 #define FRAME_IS_NEW (1 << 0)
@@ -73,6 +71,9 @@ struct startup_params {
     UINT64 lock_texture;
     UINT64 unlock_texture;
     char *error_msg;
+    uint64_t vkInstance;
+    uint64_t vkPhysDev;
+    uint64_t vkDevice;
 };
 
 struct create_source_params {

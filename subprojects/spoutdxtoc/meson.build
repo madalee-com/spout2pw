@@ -33,6 +33,10 @@ spoutdx_include_dir += [
   include_directories('./Spout2/SPOUTSDK/SpoutDirectX/SpoutDX'),
 ]
 
+spoutdx_include_dir += [
+  include_directories('/usr/i686-w64-mingw32/include/vulkan/'),
+]
+
 spoutdx_src = [
   'Spout2/SPOUTSDK/SpoutGL/SpoutCopy.cpp',
   'Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.cpp',
@@ -42,18 +46,31 @@ spoutdx_src = [
   'Spout2/SPOUTSDK/SpoutGL/SpoutUtils.cpp',
 ]
 
+message('Checking wine PE library path...')
+r = run_command(join_paths(meson.project_source_root(), '../../tools/get_wine_path.sh'),
+    'x86_64-w64-mingw32', '^/.*/libwinecrt0.a$', check: true)
+out = r.stdout().strip().split('\n')[0]
+if out.endswith('libwinecrt0.a')
+    wine_lib_paths = [out.substring(0, -13)]
+    message('Wine PE library paths: ' + ' '.join(wine_lib_paths))
+else
+    error('Wine library path not found')
+endif
+
 spoutdx_deps = [
   cpp.find_library('dxgi'),
   cpp.find_library('d3d11'),
   cpp.find_library('version'),
   cpp.find_library('winmm'),
+  cpp.find_library('vulkan-1', dirs: wine_lib_paths),
+  cpp.find_library('libpng16-16', dirs: '/usr/x86_64-w64-mingw32/bin/'),
 ]
 
 # Isolate SpoutDX warnings by building it as a static library
 spout_dx = static_library(
   'spoutdx',
   spoutdx_src,
-  include_directories: spoutdx_include_dir,
+  include_directories: spoutdx_include_dir, 
   cpp_args: [
     compiler_args,
     '-w', # Ignore all warnings

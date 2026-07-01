@@ -67,6 +67,12 @@ libfunnel_proj = subproject(
 funnel = libfunnel_proj.get_variable('funnel')
 funnel_vk = libfunnel_proj.get_variable('funnel_vk')
 
+
+vulkan_include_dir = [
+  include_directories('/usr/i686-w64-mingw32/include/vulkan/'),
+]
+
+
 windows_src = [
   'src/spout2pw.c',
 ]
@@ -97,6 +103,8 @@ windows_deps = [
   c.find_library('ntdll', dirs: wine_lib_paths),
   c.find_library('ucrt', dirs: wine_lib_paths),
   c.find_library('winecrt0', dirs: wine_lib_paths),
+  c.find_library('vulkan-1', dirs: wine_lib_paths),
+  c.find_library('libpng16-16', dirs: '/usr/x86_64-w64-mingw32/bin/'),
   spoutdxtoc_dep,
 ]
 
@@ -116,6 +124,7 @@ spout2pw_bin = executable(
   'spout2pw',
   windows_src,
   name_prefix: '',
+  include_directories: vulkan_include_dir,
   c_args: windows_compiler_args,
   link_args: windows_link_args,
   dependencies: [windows_deps],
