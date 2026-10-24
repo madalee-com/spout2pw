@@ -60,7 +60,7 @@ libfunnel_proj = subproject(
     'test_apps=false',
     'egl=false',
     'default_library=static',
-    'static_pipewire=true',
+    'static_pipewire=false',
   ]
 )
 
@@ -69,7 +69,7 @@ funnel_vk = libfunnel_proj.get_variable('funnel_vk')
 
 
 vulkan_include_dir = [
-  include_directories('/usr/i686-w64-mingw32/include/vulkan/'),
+  include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
 ]
 
 
@@ -92,10 +92,15 @@ windows_link_args = [ ]
 unix_compiler_args = [ '-DWINE_UNIX_LIB' ] + unix_include_args
 unix_link_args = [
   '-l:ntdll.so',
-  '-Wl,--whole-archive',
-  '-Wl,' + get_option('libpipewire_static_lib'),
-  '-Wl,--no-whole-archive',
 ]
+pipewire_static_lib = get_option('libpipewire_static_lib')
+if pipewire_static_lib != ''
+  unix_link_args += [
+    '-Wl,--whole-archive',
+    '-Wl,' + pipewire_static_lib,
+    '-Wl,--no-whole-archive',
+  ]
+endif
 
 windows_deps = [
   c.find_library('dxgi', dirs: wine_lib_paths),

@@ -587,10 +587,6 @@ static NTSTATUS startup(void *args) {
             free(ext_props);
         }
 
-        /*CHECK_VK_STARTUP(
-            vkCreateDevice(physDevice, &createInfo, NULL, &device)) {
-            return STATUS_FATAL_APP_EXIT;
-        }*/
         device =
             (VkDevice)((vulkan_device_from_handle((VkDevice)params->vkDevice))
                            ->host_handle);
@@ -744,9 +740,6 @@ static NTSTATUS create_source(void *args) {
     ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, false,
                                       VK_FORMAT_FEATURE_BLIT_DST_BIT);
     have_format |= ret == 0;
-    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, false,
-                                      VK_FORMAT_FEATURE_BLIT_DST_BIT);
-    have_format |= ret == 0;
     ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_SRGB, false,
                                       VK_FORMAT_FEATURE_BLIT_DST_BIT);
     have_format |= ret == 0;
@@ -866,133 +859,6 @@ static int import_texture(struct source *source) {
     TRACE("Texture import 'OK'\n");
     return 0;
 
-    /*
-
-    if (source->cur_fd != -1) {
-        close(source->cur_fd);
-        source->cur_fd = -1;
-    }
-
-    fd = fcntl(source->info.opaque_fd, F_DUPFD_CLOEXEC, 3);
-    if (fd < 0)
-        return -EINVAL;
-
-    source->cur_fd = source->info.opaque_fd;
-    source->info.opaque_fd = -1;
-
-    TRACE("Importing OPAQUE FD %d -> %d (%dx%d)\n", source->cur_fd, fd,
-          source->info.width, source->info.height);
-
-    struct format_alpha fmt_alpha = dx_to_vkformat(source->info.format);
-
-    if (fmt_alpha.format == VK_FORMAT_UNDEFINED)
-        goto err_close;
-
-    VkExternalMemoryImageCreateInfo create_info = {
-        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
-        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
-    };
-
-    VkImageCreateInfo info = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext = &create_info,
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = fmt_alpha.format,
-        .extent = (VkExtent3D){source->info.width, source->info.height, 1},
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = 1,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage =
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
-*/
-    /**
-     * Extends the usage of the image based on DirectX bind flags.
-     * This maters on NVIDIA proprietary drivers on pre-Turing GPUs as this
-     * seems to have interactions with caches. This follows
-     * https://github.com/doitsujin/dxvk/blob/0bf876eb96767b3548aff3b27985f08d819bcd99/src/d3d11/d3d11_texture.cpp#L96
-     */
-    /*
-        if (source->info.bind_flags & D3D11_BIND_SHADER_RESOURCE)
-            info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-        if (source->info.bind_flags & D3D11_BIND_RENDER_TARGET)
-            info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        if (source->info.bind_flags & D3D11_BIND_UNORDERED_ACCESS)
-            info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-
-        CHECK_VK_RESULT(vkCreateImage(device, &info, NULL, source->image)) {
-            goto err_close;
-        }
-
-        const VkImageMemoryRequirementsInfo2 mem_reqs_info = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
-            .image = *source->image,
-        };
-        VkMemoryRequirements2 mem_reqs = {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
-        };
-
-        vk.vkGetImageMemoryRequirements2KHR(device, &mem_reqs_info, &mem_reqs);
-
-        uint32_t memory_type_bits = mem_reqs.memoryRequirements.memoryTypeBits;
-
-        if (preferredMemoryTypeBits & memory_type_bits)
-            memory_type_bits &= preferredMemoryTypeBits;
-
-        TRACE("Memory type bits: required=0x%x, preferred=0x%x, choices=0x%x\n",
-              mem_reqs.memoryRequirements.memoryTypeBits,
-    preferredMemoryTypeBits, memory_type_bits);
-
-        if (!memory_type_bits) {
-            ERR("No valid memory type\n");
-            goto err_close;
-        }
-
-        VkImportMemoryFdInfoKHR memory_fd_info = {
-            .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
-            .fd = fd,
-            .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
-        };
-
-        VkMemoryAllocateInfo allocate_info = {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = &memory_fd_info,
-            .allocationSize = mem_reqs.memoryRequirements.size,
-            .memoryTypeIndex = ffs(memory_type_bits) - 1,
-        };
-
-        if (source->info.resource_size) {
-            if (allocate_info.allocationSize != source->info.resource_size) {
-                ERR("resource size mismatch!");
-            }
-            allocate_info.allocationSize = source->info.resource_size;
-        }
-
-        CHECK_VK_RESULT(
-            vkAllocateMemory(device, &allocate_info, NULL, &source->mem)) {
-            goto err_close;
-        }
-        fd = -1;
-
-        CHECK_VK_RESULT(vkBindImageMemory(device, *source->image, source->mem,
-    0)) { return -EINVAL;
-        }
-
-        TRACE("Texture import OK\n");
-
-        return 0;
-
-    err_close:
-        if (source->cur_fd != -1)
-            close(source->cur_fd);
-        source->cur_fd = -1;
-        if (fd != -1)
-            close(fd);
-        return -EINVAL;
-    */
 }
 
 static NTSTATUS run_source(void *args) {

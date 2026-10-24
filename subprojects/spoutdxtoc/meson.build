@@ -34,7 +34,7 @@ spoutdx_include_dir += [
 ]
 
 spoutdx_include_dir += [
-  include_directories('/usr/i686-w64-mingw32/include/vulkan/'),
+  include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
 ]
 
 spoutdx_src = [
