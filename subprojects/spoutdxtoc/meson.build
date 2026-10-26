@@ -63,7 +63,6 @@ spoutdx_deps = [
   cpp.find_library('version'),
   cpp.find_library('winmm'),
   cpp.find_library('vulkan-1', dirs: wine_lib_paths),
-  cpp.find_library('libpng16-16', dirs: '/usr/x86_64-w64-mingw32/bin/'),
 ]
 
 # Isolate SpoutDX warnings by building it as a static library

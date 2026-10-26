@@ -20,7 +20,7 @@
 
 #include <assert.h>
 #include <math.h>
-#include <png.h>
+/* png removed - unused */
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
@@ -340,56 +340,6 @@ static DWORD WINAPI receiver_thread(void *arg) {
         p->lpVtbl->Release(p);                                                 \
         p = NULL;                                                              \
     }
-
-// Function to save raw RGBA data to a PNG file using libpng
-int SavePNG(const char *filename, unsigned char *buffer, int width, int height,
-            int stride) {
-    FILE *fp = fopen(filename, "wb");
-    if (!fp)
-        return 0;
-
-    png_structp png_ptr =
-        png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!png_ptr) {
-        fclose(fp);
-        return 0;
-    }
-
-    png_infop info_ptr = png_create_info_struct(png_ptr);
-    if (!info_ptr) {
-        png_destroy_write_struct(&png_ptr, NULL);
-        fclose(fp);
-        return 0;
-    }
-
-    if (setjmp(png_jmpbuf(png_ptr))) {
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        fclose(fp);
-        return 0;
-    }
-
-    png_init_io(png_ptr, fp);
-
-    png_set_IHDR(png_ptr, info_ptr, width, height, 8, PNG_COLOR_TYPE_RGBA,
-                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
-                 PNG_FILTER_TYPE_DEFAULT);
-
-    png_write_info(png_ptr, info_ptr);
-
-    // Create row pointers pointing directly into our CPU staging buffer
-    png_bytepp row_pointers = (png_bytepp)malloc(sizeof(png_bytep) * height);
-    for (int y = 0; y < height; y++) {
-        row_pointers[y] = (png_bytep)(buffer + y * stride);
-    }
-
-    png_write_image(png_ptr, row_pointers);
-    png_write_end(png_ptr, NULL);
-
-    free(row_pointers);
-    png_destroy_write_struct(&png_ptr, &info_ptr);
-    fclose(fp);
-    return 1;
-}
 
 // Helper to find the correct Vulkan memory type index
 uint32_t FindMemoryType(VkPhysicalDevice physical_device, uint32_t type_filter,

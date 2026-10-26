@@ -109,7 +109,6 @@ windows_deps = [
   c.find_library('ucrt', dirs: wine_lib_paths),
   c.find_library('winecrt0', dirs: wine_lib_paths),
   c.find_library('vulkan-1', dirs: wine_lib_paths),
-  c.find_library('libpng16-16', dirs: '/usr/x86_64-w64-mingw32/bin/'),
   spoutdxtoc_dep,
 ]
 
