@@ -6,6 +6,6 @@
 	path = subprojects/pipewire-static
 	url = https://github.com/hoshinolina/pipewire-static
 
-[submodule "subprojects/spoutdxtoc/Spout2"]
-	path = subprojects/spoutdxtoc/Spout2
+[submodule "src/Spout2"]
+	path = src/Spout2
 	url = https://github.com/leadedge/Spout2
