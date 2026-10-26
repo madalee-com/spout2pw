@@ -51,21 +51,22 @@ endif
 c = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 
-# Build spout2dx.dll directly from src/
-spout2dx_include_dir = [
-  include_directories('src/fixups'),
-  include_directories('src/Spout2/SPOUTSDK/SpoutGL'),
-  include_directories('src/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX'),
+# Spout2 subproject
+spout2_proj = subproject('spout2')
+spout2_dep = spout2_proj.get_variable('spout2_dep')
+
+# Fixups include dir
+fixups_include_dir = include_directories('src/fixups')
+
+# Spout2 SDK include dirs for spout2dx.cpp
+spout2_sdk_include = [
   include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
+  include_directories('subprojects/spout2/SPOUTSDK/SpoutGL'),
+  include_directories('subprojects/spout2/SPOUTSDK/SpoutDirectX/SpoutDX'),
 ]
 
+# Build spout2dx.cpp as part of the main project
 spout2dx_src = [
-  'src/Spout2/SPOUTSDK/SpoutGL/SpoutCopy.cpp',
-  'src/Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.cpp',
-  'src/Spout2/SPOUTSDK/SpoutGL/SpoutFrameCount.cpp',
-  'src/Spout2/SPOUTSDK/SpoutGL/SpoutSenderNames.cpp',
-  'src/Spout2/SPOUTSDK/SpoutGL/SpoutSharedMemory.cpp',
-  'src/Spout2/SPOUTSDK/SpoutGL/SpoutUtils.cpp',
   'src/spout2dx.cpp',
 ]
 
@@ -78,28 +79,13 @@ spout2dx_cpp_args = [
 spout2dx_lib = static_library(
   'spout2dx',
   spout2dx_src,
-  include_directories: spout2dx_include_dir,
+  include_directories: [fixups_include_dir] + spout2_sdk_include,
   cpp_args: spout2dx_cpp_args,
-  link_args: [
-    '-static',
-    '-static-libgcc',
-    '-static-libstdc++',
-    '-Wl,--file-alignment=4096',
-  ],
 )
-
-spout2dx_deps = [
-  cpp.find_library('dxgi'),
-  cpp.find_library('d3d11'),
-  cpp.find_library('version'),
-  cpp.find_library('winmm'),
-  cpp.find_library('vulkan-1', dirs: wine_lib_paths),
-]
 
 spout2dx_dep = declare_dependency(
   link_with: spout2dx_lib,
-  include_directories: spout2dx_include_dir,
-  dependencies: spout2dx_deps,
+  include_directories: [fixups_include_dir] + spout2_sdk_include,
 )
 
 libfunnel_proj = subproject(
@@ -116,11 +102,9 @@ libfunnel_proj = subproject(
 funnel = libfunnel_proj.get_variable('funnel')
 funnel_vk = libfunnel_proj.get_variable('funnel_vk')
 
-
 vulkan_include_dir = [
   include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
 ]
-
 
 windows_src = [
   'src/spout2pw.c',
@@ -158,6 +142,7 @@ windows_deps = [
   c.find_library('ucrt', dirs: wine_lib_paths),
   c.find_library('winecrt0', dirs: wine_lib_paths),
   c.find_library('vulkan-1', dirs: wine_lib_paths),
+  spout2_dep,
   spout2dx_dep,
 ]
 
