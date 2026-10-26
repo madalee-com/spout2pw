@@ -3,3 +3,7 @@
 .cache
 subprojects/.wraplock
 .vscode/c_cpp_properties.json
+
+# Meson wrap file downloads
+subprojects/spout2/spout2/
+subprojects/packagecache/
