@@ -1,3 +1,20 @@
+// spout2pw.c - Windows PE service for Spout2PW
+//
+// This is the Wine PE service that runs on Windows and:
+//   1. Monitors Spout2 senders via spoutdxtoc
+//   2. Extracts Vulkan images via DXVK interop
+//   3. Communicates with the Unix shared library via Wine unixlib calls
+//
+// Build requirements:
+//   - x86_64-w64-mingw32 toolchain
+//   - Wine development headers
+//   - DirectX 11 SDK
+//   - Vulkan SDK (Win32)
+//   - spoutdxtoc library
+//
+// Author: Madalee
+// License: MIT
+
 #define _POSIX_C_SOURCE 200809L
 #define VK_USE_PLATFORM_WIN32_KHR
 
@@ -16,8 +33,6 @@
 
 #include "d3d11_1.h"
 #include "initguid.h"
-// #include "d3d12.h"
-// #include "d3d12sdklayers.h"
 #include "dxgi1_6.h"
 
 #include <winbase.h>
@@ -34,8 +49,6 @@
 
 #include <spoutdxtoc.h>
 #include <vulkan/vulkan.h>
-// #include "subprojects/spoutdxtoc/Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.h" //
-// for creating a shared texture
 
 WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
@@ -201,6 +214,10 @@ static const GUID IID_ID3D11Resource_C = {
     {0xba, 0x44, 0x05, 0xc4, 0x3e, 0x6a, 0xaa, 0x24}};
 
 static WCHAR spout2pwW[] = L"Spout2Pw";
+
+// Maximum number of WINEDLLDIR paths to check
+#define MAX_WINEDLLDIR 100
+
 static HANDLE exit_event;
 static SERVICE_STATUS_HANDLE service_handle;
 static SERVICE_STATUS service_status;
@@ -211,7 +228,7 @@ static SPOUTDXTOC_SENDERNAMES *spout_names = NULL;
 static DWORD WINAPI sendernames_thread(void *arg);
 
 static bool do_restart = false;
-static bool startup_done = FALSE;
+static bool startup_done = false;
 
 static ID3D11Device *pDevice = NULL;
 static ID3D11DeviceContext *pContext = NULL;
@@ -437,9 +454,10 @@ static bool startup(SPOUTDXTOC_RECEIVER *spout) {
     TRACE("Starting up libfunnel\n");
 
     if (!startup_done) {
-        struct startup_params params = {.lock_texture = (UINT_PTR)lock_texture,
+        // Note: Cast to uint64_t required for Wine callback ID interop
+        struct startup_params params = {.lock_texture = (uint64_t)(uintptr_t)lock_texture,
                                         .unlock_texture =
-                                            (UINT_PTR)unlock_texture,
+                                            (uint64_t)(uintptr_t)unlock_texture,
                                         .error_msg = NULL,
                                         .vkInstance = (UINT_PTR)vkInstance,
                                         .vkPhysDev = (UINT_PTR)vkPhysDev,
@@ -878,7 +896,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         {spout2pwW, ServiceMain}, {NULL, NULL}};
 
     bool found = false;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < MAX_WINEDLLDIR; i++) {
         char buf[16];
         sprintf(buf, "WINEDLLDIR%d", i);
         const char *val = getenv(buf);

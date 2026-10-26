@@ -1,3 +1,19 @@
+// spout2pw_unix.c - Unix shared library for Spout2PW
+//
+// This is the Linux-side component that:
+//   1. Receives Vulkan image handles from the Windows service
+//   2. Imports them into PipeWire via libfunnel
+//   3. Manages texture lifecycle and streaming
+//
+// Build requirements:
+//   - Wine development headers (for unixlib interop)
+//   - Vulkan SDK
+//   - libfunnel (subproject)
+//   - PipeWire (dynamic linking)
+//
+// Author: Madalee
+// License: MIT
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -7,7 +23,6 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
-//
 
 #include <funnel-vk.h>
 #include <funnel.h>
@@ -70,6 +85,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
 static struct startup_params startup_params = {0};
 struct funnel_ctx *funnel;
+static bool teardown_in_progress = false;
 
 struct source {
     void *receiver;
@@ -118,6 +134,9 @@ struct vulkan_image {
     uint64_t client_handle;
 };
 
+// Wine interop: VkInstance/VkDevice/etc. are passed as pointers to
+// vulkan_client_object structs. We extract the real Unix handle from it.
+// This is a Wine-specific pattern and not portable Vulkan code.
 static inline struct vulkan_instance *
 vulkan_instance_from_handle(VkInstance handle) {
     struct vulkan_client_object *client = (struct vulkan_client_object *)handle;
@@ -728,12 +747,6 @@ static NTSTATUS create_source(void *args) {
     ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, true,
                                       VK_FORMAT_FEATURE_BLIT_DST_BIT);
     have_format |= ret == 0;
-    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_UNORM, true,
-                                      VK_FORMAT_FEATURE_BLIT_DST_BIT);
-    have_format |= ret == 0;
-    ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_SRGB, true,
-                                      VK_FORMAT_FEATURE_BLIT_DST_BIT);
-    have_format |= ret == 0;
     ret = funnel_stream_vk_add_format(stream, VK_FORMAT_R8G8B8A8_SRGB, true,
                                       VK_FORMAT_FEATURE_BLIT_DST_BIT);
     have_format |= ret == 0;
@@ -850,7 +863,7 @@ static int import_texture(struct source *source) {
     int fd = -1;
 
     if (source->info.vk_image < 0)
-        return -EINVAL;
+        return STATUS_INVALID_PARAMETER;
 
     struct format_alpha fmt_alpha = dx_to_vkformat(source->info.format);
     
@@ -871,7 +884,7 @@ static NTSTATUS run_source(void *args) {
     TRACE("run_source()\n");
 
     pthread_mutex_lock(&source->lock);
-    while (!source->quit) {
+    while (!source->quit && !teardown_in_progress) {
         TRACE("run_source(): Iterate\n");
         if (source->update) {
             TRACE("run_source(): Update flags=%d\n", source->info.flags);
@@ -1197,6 +1210,7 @@ static void teardown(void) {
 }
 
 static NTSTATUS _teardown(void *args) {
+    teardown_in_progress = true;
     teardown();
 
     return STATUS_SUCCESS;

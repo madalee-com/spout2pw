@@ -1,3 +1,18 @@
+#pragma once
+
+// spout2pw_unix.h - Wine cross-platform interface for Spout2PW
+//
+// This header defines the data structures and types shared between the
+// Windows PE service (spout2pw.c) and the Unix shared library (spout2pw_unix.c).
+//
+// Build requirements:
+//   - Wine development headers
+//   - Vulkan SDK
+//   - spoutdxtoc library
+//
+// Author: Madalee
+// License: MIT
+
 #include <stdint.h>
 
 #define __WINESRC__
@@ -68,8 +83,9 @@ struct lock_texture_return {
 };
 
 struct startup_params {
-    UINT64 lock_texture;
-    UINT64 unlock_texture;
+    // Callback IDs passed across Wine/Unix boundary (integer cast required)
+    uint64_t lock_texture;
+    uint64_t unlock_texture;
     char *error_msg;
     uint64_t vkInstance;
     uint64_t vkPhysDev;
