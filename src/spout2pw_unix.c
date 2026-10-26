@@ -34,8 +34,6 @@
 WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
 
 #define API_VERSION VK_API_VERSION_1_0
-// #define HAVE_VK_1_1
-// #define HAVE_VK_1_2
 
 #define D3DFMT_A8R8G8B8 21
 #define D3DFMT_X8R8G8B8 22
@@ -420,49 +418,12 @@ static NTSTATUS startup(void *args) {
             free(ext_props);
         }
 
-        TRACE("About to test instance\n");
-        // 1. Cast the raw Windows handle pointer to Wine's true client-object
-        // tracking header
-        /*
-            struct vulkan_client_object* client_obj = (struct
-           vulkan_client_object*)params->vkInstance; if (!client_obj ||
-           !client_obj->unix_handle) { ERR("[-] Error: Invalid or unmapped
-           Windows Vulkan handle received.\n"); return STATUS_INVALID_PARAMETER;
-            }
-            struct vulkan_instance_unix* wine_inst = (struct
-           vulkan_instance_unix*)client_obj->unix_handle;
-        */
-
         TRACE("About to set instance\n");
         instance = (VkInstance)((vulkan_instance_from_handle(
                                      (VkInstance)params->vkInstance))
                                     ->host_handle);
-        /*CHECK_VK_STARTUP(vkCreateInstance(&createInfo, NULL, &instance)) {
-            return STATUS_FATAL_APP_EXIT;
-        }*/
         TRACE("Did set instance\n");
     }
-    /*
-        {
-            VkDebugUtilsMessengerCreateInfoEXT createInfo = {0};
-            createInfo.sType =
-                VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-            createInfo.messageSeverity =
-                VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-                VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-            createInfo.messageType =
-                VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-            createInfo.pfnUserCallback = vulkan_message;
-
-            CHECK_VK_STARTUP(GET_EXTENSION_FUNCTION(vkCreateDebugUtilsMessengerEXT)(
-                instance, &createInfo, NULL, &debugMessenger)) {
-                return STATUS_FATAL_APP_EXIT;
-            }
-        }
-    */
     TRACE("Try enumerate phys device\n");
     uint32_t physDeviceCount;
     vkEnumeratePhysicalDevices(instance, &physDeviceCount, NULL);
@@ -799,9 +760,6 @@ static void free_texture(struct source *source) {
     if (source->image != VK_NULL_HANDLE)
         vkDestroyImage(device, source->image, NULL);
     source->image = VK_NULL_HANDLE;
-    /*if (source->mem != VK_NULL_HANDLE)
-        vkFreeMemory(device, source->mem, NULL);
-    source->mem = VK_NULL_HANDLE;*/
 
     if (source->cur_fd != -1) {
         close(source->cur_fd);
@@ -989,40 +947,6 @@ static NTSTATUS run_source(void *args) {
             goto cont;
         }
         TRACE("Did init command buffer\n");
-
-        /*
-         * See: https://github.com/KhronosGroup/Vulkan-Docs/issues/2652
-         * GENERAL -> GENERAL layout transition is correct for external images
-         * VK_QUEUE_FAMILY_EXTERNAL synchronizes with external producer
-         * (though dxvk does not do the queue thing itself...)
-         */
-        /*
-        VkImageMemoryBarrier barrier = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-            // Assume write is either via attachment or transfer
-            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                             VK_ACCESS_TRANSFER_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL,
-            .dstQueueFamilyIndex = queueFamilyIndex,
-            .image = source->image,
-            .subresourceRange =
-                {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
-        };
-
-        TRACE("Setup CMD Pipeline Barrier\n");
-        vkCmdPipelineBarrier(source->commandBuffer,
-                             VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-                             VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, NULL, 0,
-                             NULL, 1, &barrier);*/
 
         VkImageBlit region = {
             .srcSubresource =
