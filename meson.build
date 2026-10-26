@@ -51,19 +51,65 @@ endif
 c = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 
-# Spout2 subproject
-spout2_proj = subproject('spout2')
-spout2_dep = spout2_proj.get_variable('spout2_dep')
+# libfunnel subproject
+libfunnel_proj = subproject(
+  'libfunnel',
+  default_options: [
+    'native=true',
+    'test_apps=false',
+    'egl=false',
+    'default_library=static',
+    'static_pipewire=false',
+  ]
+)
+
+funnel = libfunnel_proj.get_variable('funnel')
+funnel_vk = libfunnel_proj.get_variable('funnel_vk')
+
+# Spout2 sources (inline, not as subproject)
+spout2_include_dir = [
+  include_directories('src/Spout2/SPOUTSDK/SpoutGL'),
+  include_directories('src/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX'),
+  include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
+]
+
+spout2_src = [
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutCopy.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutFrameCount.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutSenderNames.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutSharedMemory.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutUtils.cpp',
+]
+
+spout2_deps = [
+  cpp.find_library('dxgi'),
+  cpp.find_library('d3d11'),
+  cpp.find_library('version'),
+  cpp.find_library('winmm'),
+]
+
+spout2_lib = static_library(
+  'spout2',
+  spout2_src,
+  include_directories: spout2_include_dir,
+  cpp_args: ['-msse4', '-gdwarf-4', '-w'],
+  link_args: [
+    '-static',
+    '-static-libgcc',
+    '-static-libstdc++',
+    '-Wl,--file-alignment=4096',
+  ],
+)
+
+spout2_dep = declare_dependency(
+  link_with: spout2_lib,
+  include_directories: spout2_include_dir,
+  dependencies: spout2_deps,
+)
 
 # Fixups include dir
 fixups_include_dir = include_directories('src/fixups')
-
-# Spout2 SDK include dirs for spout2dx.cpp
-spout2_sdk_include = [
-  include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
-  include_directories('subprojects/spout2/SPOUTSDK/SpoutGL'),
-  include_directories('subprojects/spout2/SPOUTSDK/SpoutDirectX/SpoutDX'),
-]
 
 # Build spout2dx.cpp as part of the main project
 spout2dx_src = [
@@ -79,28 +125,14 @@ spout2dx_cpp_args = [
 spout2dx_lib = static_library(
   'spout2dx',
   spout2dx_src,
-  include_directories: [fixups_include_dir] + spout2_sdk_include,
+  include_directories: [fixups_include_dir] + spout2_include_dir,
   cpp_args: spout2dx_cpp_args,
 )
 
 spout2dx_dep = declare_dependency(
   link_with: spout2dx_lib,
-  include_directories: [fixups_include_dir] + spout2_sdk_include,
+  include_directories: [fixups_include_dir] + spout2_include_dir,
 )
-
-libfunnel_proj = subproject(
-  'libfunnel',
-  default_options: [
-    'native=true',
-    'test_apps=false',
-    'egl=false',
-    'default_library=static',
-    'static_pipewire=false',
-  ]
-)
-
-funnel = libfunnel_proj.get_variable('funnel')
-funnel_vk = libfunnel_proj.get_variable('funnel_vk')
 
 vulkan_include_dir = [
   include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
