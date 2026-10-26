@@ -22,6 +22,7 @@ spout2_deps = [
   cpp.find_library('d3d11'),
   cpp.find_library('version'),
   cpp.find_library('winmm'),
+  cpp.find_library('comctl32'),
 ]
 
 spout2_lib = static_library(

@@ -51,12 +51,25 @@ endif
 c = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 
-# Spout2 subproject
+# Spout2 subproject (managed via wrap file)
 spout2_proj = subproject('spout2')
 spout2_dep = spout2_proj.get_variable('spout2_dep')
-
-# Get Spout2 include directories from subproject
 spout2_include_dir = spout2_proj.get_variable('spout2_include_dir')
+
+# libfunnel subproject
+libfunnel_proj = subproject(
+  'libfunnel',
+  default_options: [
+    'native=true',
+    'test_apps=false',
+    'egl=false',
+    'default_library=static',
+    'static_pipewire=false',
+  ]
+)
+
+funnel = libfunnel_proj.get_variable('funnel')
+funnel_vk = libfunnel_proj.get_variable('funnel_vk')
 
 # Fixups include dir
 fixups_include_dir = include_directories('src/fixups')
@@ -83,20 +96,6 @@ spout2dx_dep = declare_dependency(
   link_with: spout2dx_lib,
   include_directories: [fixups_include_dir] + spout2_include_dir,
 )
-
-libfunnel_proj = subproject(
-  'libfunnel',
-  default_options: [
-    'native=true',
-    'test_apps=false',
-    'egl=false',
-    'default_library=static',
-    'static_pipewire=false',
-  ]
-)
-
-funnel = libfunnel_proj.get_variable('funnel')
-funnel_vk = libfunnel_proj.get_variable('funnel_vk')
 
 vulkan_include_dir = [
   include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
