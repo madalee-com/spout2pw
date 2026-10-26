@@ -1,7 +1,7 @@
 // spout2pw.c - Windows PE service for Spout2PW
 //
 // This is the Wine PE service that runs on Windows and:
-//   1. Monitors Spout2 senders via spoutdxtoc
+//   1. Monitors Spout2 senders via spout2dx
 //   2. Extracts Vulkan images via DXVK interop
 //   3. Communicates with the Unix shared library via Wine unixlib calls
 //
@@ -10,7 +10,7 @@
 //   - Wine development headers
 //   - DirectX 11 SDK
 //   - Vulkan SDK (Win32)
-//   - spoutdxtoc library
+//   - spout2dx library
 //
 // Author: Madalee
 // License: MIT
@@ -47,7 +47,7 @@
 #include <ddk/d3dkmthk.h>
 #include <vulkan.h>
 
-#include <spoutdxtoc.h>
+#include "spout2dx.h"
 #include <vulkan/vulkan.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(spout2pw);
@@ -773,14 +773,14 @@ static void WINAPI ServiceMain(DWORD argc, LPWSTR *argv) {
         goto stop;
     }
 
-    TRACE("Initializing spoutdxtoc.dll\n");
+    TRACE("Initializing spout2dx.dll\n");
 
 restart:
 
     // NOTE: There is no point continuing if it is.
     spout_names = SpoutDXToCNewSenderNames();
     if (spout_names == NULL) {
-        msg = "Error initializing spoutdxtoc.dll";
+        msg = "Error initializing spout2dx.dll";
         goto stop;
     }
 

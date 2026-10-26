@@ -8,7 +8,7 @@
 // Build requirements:
 //   - Wine development headers
 //   - Vulkan SDK
-//   - spoutdxtoc library
+//   - spout2dx library
 //
 // Author: Madalee
 // License: MIT

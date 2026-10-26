@@ -1,7 +1,0 @@
-@ stdcall SpoutDXToCNew()
-@ stub SpoutDXToCFree(ptr)
-@ stub SpoutDXToCGetSenderCount()
-@ stub SpoutDXToCGetSender(ptr int64 ptr)
-@ stub SpoutDXToCGetSenderListSimple(ptr ptr)
-@ stub SpoutDXToCNamelistClear(ptr)
-@ stub SpoutDXToCGetSenderList(ptr ptr ptr ptr ptr)

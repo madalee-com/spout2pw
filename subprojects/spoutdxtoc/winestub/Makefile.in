@@ -1,4 +1,0 @@
-MODULE     = spoutdxtoc.dll
-
-SOURCES = \
-	stub.c \

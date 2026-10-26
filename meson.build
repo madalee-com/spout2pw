@@ -1,4 +1,4 @@
-project('spout2pw', 'c',
+project('spout2pw', 'c', 'cpp',
     meson_version: '>=1.1'
 )
 
@@ -49,9 +49,58 @@ else
 endif
 
 c = meson.get_compiler('c')
+cpp = meson.get_compiler('cpp')
 
-spoutdxtoc_proj = subproject('spoutdxtoc')
-spoutdxtoc_dep = spoutdxtoc_proj.get_variable('spoutdxtoc_dep')
+# Build spout2dx.dll directly from src/
+spout2dx_include_dir = [
+  include_directories('src/fixups'),
+  include_directories('src/Spout2/SPOUTSDK/SpoutGL'),
+  include_directories('src/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX'),
+  include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
+]
+
+spout2dx_src = [
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutCopy.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutDirectX.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutFrameCount.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutSenderNames.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutSharedMemory.cpp',
+  'src/Spout2/SPOUTSDK/SpoutGL/SpoutUtils.cpp',
+  'src/spout2dx.cpp',
+]
+
+spout2dx_cpp_args = [
+  '-msse4',
+  '-gdwarf-4',
+  '-w',  # Ignore all warnings from Spout SDK
+]
+
+spout2dx_lib = static_library(
+  'spout2dx',
+  spout2dx_src,
+  include_directories: spout2dx_include_dir,
+  cpp_args: spout2dx_cpp_args,
+  link_args: [
+    '-static',
+    '-static-libgcc',
+    '-static-libstdc++',
+    '-Wl,--file-alignment=4096',
+  ],
+)
+
+spout2dx_deps = [
+  cpp.find_library('dxgi'),
+  cpp.find_library('d3d11'),
+  cpp.find_library('version'),
+  cpp.find_library('winmm'),
+  cpp.find_library('vulkan-1', dirs: wine_lib_paths),
+]
+
+spout2dx_dep = declare_dependency(
+  link_with: spout2dx_lib,
+  include_directories: spout2dx_include_dir,
+  dependencies: spout2dx_deps,
+)
 
 libfunnel_proj = subproject(
   'libfunnel',
@@ -109,7 +158,7 @@ windows_deps = [
   c.find_library('ucrt', dirs: wine_lib_paths),
   c.find_library('winecrt0', dirs: wine_lib_paths),
   c.find_library('vulkan-1', dirs: wine_lib_paths),
-  spoutdxtoc_dep,
+  spout2dx_dep,
 ]
 
 vulkan = dependency('vulkan', native: true)
