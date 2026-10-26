@@ -3,18 +3,18 @@ project('spout2', ['c', 'cpp'], default_options: ['cpp_std=c++11'])
 cpp = meson.get_compiler('cpp')
 
 spout2_include_dir = [
-  include_directories('SPOUTSDK/SpoutGL'),
-  include_directories('SPOUTSDK/SpoutDirectX/SpoutDX'),
+  include_directories('spout2/SPOUTSDK/SpoutGL'),
+  include_directories('spout2/SPOUTSDK/SpoutDirectX/SpoutDX'),
   include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
 ]
 
 spout2_src = [
-  'SPOUTSDK/SpoutGL/SpoutCopy.cpp',
-  'SPOUTSDK/SpoutGL/SpoutDirectX.cpp',
-  'SPOUTSDK/SpoutGL/SpoutFrameCount.cpp',
-  'SPOUTSDK/SpoutGL/SpoutSenderNames.cpp',
-  'SPOUTSDK/SpoutGL/SpoutSharedMemory.cpp',
-  'SPOUTSDK/SpoutGL/SpoutUtils.cpp',
+  'spout2/SPOUTSDK/SpoutGL/SpoutCopy.cpp',
+  'spout2/SPOUTSDK/SpoutGL/SpoutDirectX.cpp',
+  'spout2/SPOUTSDK/SpoutGL/SpoutFrameCount.cpp',
+  'spout2/SPOUTSDK/SpoutGL/SpoutSenderNames.cpp',
+  'spout2/SPOUTSDK/SpoutGL/SpoutSharedMemory.cpp',
+  'spout2/SPOUTSDK/SpoutGL/SpoutUtils.cpp',
 ]
 
 spout2_deps = [
