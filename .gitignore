@@ -7,3 +7,4 @@ subprojects/.wraplock
 # Meson wrap file downloads
 subprojects/spout2/spout2/
 subprojects/packagecache/
+pkg/
