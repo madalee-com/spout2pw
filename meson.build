@@ -119,6 +119,7 @@ windows_compiler_args = [
 windows_link_args = [ ]
 unix_compiler_args = [ '-DWINE_UNIX_LIB' ] + unix_include_args
 unix_link_args = [
+  '-lm',
   '-l:ntdll.so',
 ]
 pipewire_static_lib = get_option('libpipewire_static_lib')
