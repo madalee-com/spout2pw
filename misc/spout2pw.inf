@@ -9,7 +9,6 @@ AddService = Spout2Pw,0,Spout2PwService
 
 [Spout2PwFakeDlls]
 11,,spout2pw.exe,*
-11,,spoutdxtoc.dll,*
 
 [Spout2PwService]
 Description="Spout to PipeWire bridge"
