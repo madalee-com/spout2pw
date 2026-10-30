@@ -86,17 +86,31 @@ struct source {
 | `0x887A0001` | `DXGI_ERROR_UNSUPPORTED` | Format not supported by DXVK |
 | `STATUS_NO_SUCH_DEVICE` | — | Source no longer valid (triggers restart) |
 
-## Debug Macros
+## Debug Output
 
-All debug output uses Wine's tracing system. Enable with:
+Spout2PW has its own debug logging layer, gated behind an environment variable or command-line flag. All internal `fprintf(stderr,...)` calls were removed in favor of `spout2pw_dbg()`, which only emits when debugging is enabled.
+
+Enable via one of:
 
 ```bash
-WINEDEBUG=+spout2pw wine64 <app_that_uses_spout2>
+# Environment variable (affects the whole Wine process)
+export SPOUT2PW_DEBUG=1
+steam # or your game launch command
+
+# Command-line flag (direct ServiceMain testing, bypasses SCM)
+spout2pw.sh --debug <game_command>
 ```
 
-| Macro | Severity |
-|-------|----------|
-| `TRACE(...)` | Verbose trace |
-| `WARN(...)` | Warning |
-| `ERR(...)` | Error |
-| `FIXME(...)` | Unimplemented path |
+Debug output is prefixed with `[spout2pw]` and covers:
+- ServiceMain entry / exit
+- `__wine_init_unix_call()` return values
+- DLL load results
+- Sender/receiver lifecycle events
+
+Wine's own tracing still works alongside this:
+
+```bash
+export WINEDEBUG=+timestamp,+relay,+spout2pw
+```
+
+Both systems are independent; use `SPOUT2PW_DEBUG` for Spout2PW-specific detail and `WINEDEBUG` for Wine loader / subsystem traces.

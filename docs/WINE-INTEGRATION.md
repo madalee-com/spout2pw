@@ -125,32 +125,27 @@ This is the critical function. It:
 2. Verifies that `spout2pw.so` is available and can be loaded
 3. Returns `STATUS_SUCCESS` (0x00000000) on success, or `STATUS_DLL_NOT_FOUND` (0xC0000135) on failure
 
-If this fails, the service shows an error dialog and exits:
-
-```c
-if (ret != STATUS_SUCCESS) {
-    msg = "Error initializing UNIX library";
-    goto stop;  // Calls show_error() which displays a message box
-}
-```
+If this fails, the service **no longer shows an error dialog**. Instead it logs a debug message and continues — a truly broken unixlib will fail at the first real `UNIX_CALL`, not at init time.
 
 ---
 
 ## The c0000135 Error
 
-### Symptom
+### Symptom (historical)
 
-A one-time error dialog appears when launching a game via `spout2pw.sh`:
+A one-time error dialog used to appear when launching a game via `spout2pw.sh`:
 
 ```
 Error initializing UNIX library (c0000135)
 ```
 
-After dismissing it, the game works fine.
+After dismissing it, the game worked fine. **The popup has since been suppressed** — the service now treats the failure as non-fatal and continues. You will only see it in debug logs (`SPOUT2PW_DEBUG=1`) if it occurs.
 
 ### Root Cause
 
-The error occurs when `WINEDLLPATH` is **not set** at the time Wine SCM starts the Spout2Pw service. Without `WINEDLLPATH`, Wine can't find `spout2pw.so`, so `__wine_init_unix_call()` fails.
+The error occurs when `WINEDLLPATH` is **not set** at the time Wine SCM starts the Spout2Pw service. Without `WINEDLLPATH`, Wine can't find `spout2pw.so`, so `__wine_init_unix_call()` fails with `STATUS_DLL_NOT_FOUND`.
+
+This typically happens on the **auto-start path**: Wine's SCM invokes `ServiceMain` directly when a Wine process initializes, before any application has called `LoadLibraryW("spout2pw.dll")` to establish the unixlib handle via DllMain.
 
 **Timeline of the bug (before fix):**
 
@@ -170,11 +165,13 @@ spout2pw.sh main():
 
 The service failed during `prepare_prefix()` because `setup_env()` (which exports `WINEDLLPATH`) hadn't run yet.
 
-**Why it recovered:** On the next Wine process launch (the game itself), `WINEDLLPATH` was already set, so the service started successfully. The error was transient.
+**Why it recovered:** On the next Wine process launch (the game itself), `WINEDLLPATH` was already set and `LoadLibraryW("spout2pw.dll")` ran, so DllMain registered the unixlib and subsequent calls succeeded. The error was transient.
 
-### Fix
+### Fixes
 
-Reorder `main()` so `setup_env()` runs **before** `prepare_prefix()`:
+Two layers of mitigation were applied:
+
+**1. Script ordering** — `setup_env()` (which exports `WINEDLLPATH`) now runs **before** `prepare_prefix()`:
 
 ```bash
 # spout2pw.sh main():
@@ -185,7 +182,9 @@ prepare_prefix     # Service starts with WINEDLLPATH available
 "$@"
 ```
 
-Now `WINEDLLPATH` is exported before any Wine process launches during prefix preparation, so the service starts cleanly.
+Now `WINEDLLPATH` is exported before any Wine process launches during prefix preparation, so the auto-start service finds the unixlib.
+
+**2. Code-level tolerance** — `ServiceMain` no longer treats a failed `__wine_init_unix_call()` as fatal. If the unixlib was already initialized by DllMain (the common case), the redundant re-lookup simply fails harmlessly and is logged at debug level. A genuinely broken unixlib will surface its error at the first real `UNIX_CALL`.
 
 ---
 
@@ -270,7 +269,7 @@ spout2pw-dlls/
 
 4. **Service auto-start is a double-edged sword**: Wine SCM starts the service automatically, which is convenient but means the service can start during prefix preparation (before `WINEDLLPATH` is set) unless we reorder the startup sequence.
 
-5. **The error is transient**: Once `WINEDLLPATH` is set (on subsequent Wine launches), the service starts successfully and the game works.
+5. **The error is non-fatal**: Even if it occurs (e.g., a very early SCM auto-start), the service suppresses the popup and continues. The unixlib handle is established by DllMain on the first `LoadLibraryW`, so normal operation proceeds.
 
 ---
 
