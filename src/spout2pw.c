@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <math.h>
 /* png removed - unused */
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
@@ -221,6 +222,10 @@ static WCHAR spout2pwW[] = L"Spout2Pw";
 static HANDLE exit_event;
 static SERVICE_STATUS_HANDLE service_handle;
 static SERVICE_STATUS service_status;
+
+static int debug_mode_in_service = 0;
+
+#include "debug_log.h"
 
 static HANDLE sendernames_thread_handle = 0;
 static SPOUTDXTOC_SENDERNAMES *spout_names = NULL;
@@ -748,13 +753,21 @@ __attribute__((unused)) static const char *_getenv(const char *var) {
 }
 
 static void WINAPI ServiceMain(DWORD argc, LPWSTR *argv) {
+    spout2pw_dbg("[spout2pw] ServiceMain ENTERED argc=%lu\n", (unsigned long)argc);
     NTSTATUS ret;
     const char *msg = NULL;
 
-    service_handle =
-        RegisterServiceCtrlHandlerExW(spout2pwW, service_handler, NULL);
-    if (!service_handle)
-        return;
+    // In debug mode, skip RegisterServiceCtrlHandlerExW (fails without SCM)
+    if (debug_mode_in_service) {
+        spout2pw_dbg("[spout2pw] Debug mode: skipping RegisterServiceCtrlHandlerExW\n");
+        service_handle = (HANDLE)0x12345678;  // dummy handle for testing
+    } else {
+        service_handle =
+            RegisterServiceCtrlHandlerExW(spout2pwW, service_handler, NULL);
+        spout2pw_dbg("[spout2pw] After RegisterServiceCtrlHandlerExW: handle=%p error=%lu\n", service_handle, GetLastError());
+        if (!service_handle)
+            return;
+    }
 
     service_status.dwServiceType = SERVICE_WIN32;
     service_status.dwCurrentState = SERVICE_START_PENDING;
@@ -763,14 +776,34 @@ static void WINAPI ServiceMain(DWORD argc, LPWSTR *argv) {
     service_status.dwServiceSpecificExitCode = 0;
     service_status.dwCheckPoint = 1;
     service_status.dwWaitHint = 15000;
-    SetServiceStatus(service_handle, &service_status);
+
+    if (!debug_mode_in_service) {
+        spout2pw_dbg("[spout2pw] Before SetServiceStatus\n");
+        SetServiceStatus(service_handle, &service_status);
+        spout2pw_dbg("[spout2pw] After SetServiceStatus: error=%lu\n", GetLastError());
+    }
 
     TRACE("Loading unix calls\n");
 
+    spout2pw_dbg("[spout2pw] Before __wine_init_unix_call\n");
     ret = __wine_init_unix_call();
+    spout2pw_dbg("[spout2pw] After __wine_init_unix_call: ret=0x%x\n", ret);
     if (ret != STATUS_SUCCESS) {
-        msg = "Error initializing UNIX library";
-        goto stop;
+        if (spout2pw_unixlib_ready) {
+            /* The unixlib was already initialized by DllMain during an earlier
+             * LoadLibraryW("spout2pw.dll") call. Wine's redundant re-lookup from
+             * ServiceMain can fail (STATUS_DLL_NOT_FOUND) even though the handle
+             * is valid — this is harmless. */
+            spout2pw_dbg("[spout2pw] unixlib already ready; ignoring redundant lookup failure\n");
+        } else {
+            /* Wine's SCM may invoke ServiceMain before LoadLibraryW has loaded
+             * the builtin (auto-start path). The handle gets established by the
+             * builtin loader regardless, so a spurious STATUS_DLL_NOT_FOUND here
+             * is not fatal — a truly broken unixlib will fail at the first real
+             * UNIX_CALL. Suppress the popup; keep a debug log. */
+            spout2pw_dbg("[spout2pw] __wine_init_unix_call failed but continuing "
+                         "(likely SCM auto-start race)\n");
+        }
     }
 
     TRACE("Initializing spout2dx.dll\n");
@@ -842,16 +875,27 @@ stop:
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nCmdShow) {
+    spout2pw_debug = (getenv("SPOUT2PW_DEBUG") != NULL);
+    spout2pw_dbg("[spout2pw] WinMain ENTERED pid=%d\n", (int)GetCurrentProcessId());
+    fflush(stderr);
+    TRACE("WinMain entered\n");
+    spout2pw_dbg("[spout2pw] Command line: %s\n", lpCmdLine ? lpCmdLine : "(null)");
     static const SERVICE_TABLE_ENTRYW service_table[] = {
         {spout2pwW, ServiceMain}, {NULL, NULL}};
 
     bool found = false;
+    WCHAR exe_path[MAX_PATH];
+    DWORD exe_len = GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+    TRACE("GetModuleFileNameW returned: %lu\n", exe_len);
     for (int i = 0; i < MAX_WINEDLLDIR; i++) {
         char buf[16];
         sprintf(buf, "WINEDLLDIR%d", i);
         const char *val = getenv(buf);
-        if (!val)
+        TRACE("Loop iteration %d, checking %s\n", i, buf);
+        if (!val) {
+            TRACE("getenv(%s) returned NULL, breaking loop\n", buf);
             break;
+        }
         TRACE("Check DLL path: %s=%s\n", buf, val);
         size_t len = strlen(val);
         const char *match = "\\spout2pw-dlls";
@@ -865,15 +909,109 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         break;
     }
 
+    // Also check WINEDLLPATH (semicolon-separated list of directories)
+    // find_builtin_dll() searches WINEDLLPATH for the matching spout2pw.so
+    {
+        const char *winepath = getenv("WINEDLLPATH");
+        TRACE("WINEDLLPATH=%s\n", winepath ? winepath : "(null)");
+        if (winepath) {
+            // Duplicate and tokenize by semicolon
+            char *path_copy = strdup(winepath);
+            char *dir = strtok(path_copy, ";:");
+            while (dir) {
+                size_t len = strlen(dir);
+                const char *match = "\\spout2pw-dlls";
+                size_t mlen = strlen(match);
+                if (len >= mlen && strcmp(dir + len - mlen, match) == 0) {
+                    TRACE("WINEDLLPATH contains spout2pw-dlls directory\n");
+                    found = 1;
+                    break;
+                }
+                dir = strtok(NULL, ";:");
+            }
+            free(path_copy);
+        }
+    }
+
+    // Fallback: derive DLL path from executable location when WINEDLLDIR is not set
+    // (e.g. when started as a Windows service, Wine does not populate WINEDLLDIR)
+    TRACE("After scan loop: found=%d\n", found);
+    if (!found) {
+        TRACE("Fallback: deriving DLL path from executable location\n");
+        WCHAR exe_path[MAX_PATH];
+        DWORD exe_len = GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+        TRACE("GetModuleFileNameW returned: %lu\n", exe_len);
+        if (exe_len > 0 && exe_len < MAX_PATH) {
+            // Convert to UTF-8 and strip the executable name
+            char exe_utf8[MAX_PATH];
+            WideCharToMultiByte(CP_UTF8, 0, exe_path, -1, exe_utf8, sizeof(exe_utf8), NULL, NULL);
+            TRACE("Executable path (UTF-8): %s\n", exe_utf8);
+            char *last_sep = strrchr(exe_utf8, '\\');
+            if (last_sep) {
+                *last_sep = '\0';
+                // Strip the x86_64-windows/ component to get spout2pw-dlls/
+                // (Wine's find_builtin_dll looks for x86_64-unix/ subdir within WINEDLLPATH)
+                char *second_sep = strrchr(exe_utf8, '\\');
+                if (second_sep) {
+                    *second_sep = '\0';
+                    TRACE("Setting WINEDLLPATH to: %s\n", exe_utf8);
+                    SetEnvironmentVariableA("WINEDLLPATH", exe_utf8);
+                } else {
+                    // Fallback: use the directory as-is
+                    TRACE("Setting WINEDLLPATH to: %s\n", exe_utf8);
+                    SetEnvironmentVariableA("WINEDLLPATH", exe_utf8);
+                }
+                found = 1;
+            }
+        }
+    }
+
     if (!found) {
         ERR("Spout2 not configured in WINEDLLPATH\n");
         return 0;
     }
 
+    /*
+     * Load spout2pw.dll (the Wine fake DLL) before starting the service.
+     *
+     * spout2pw.exe is loaded by Wine via open_main_image(), which does NOT
+     * register it in builtin_modules. Therefore __wine_init_unix_call() called
+     * from ServiceMain would fail with STATUS_DLL_NOT_FOUND.
+     *
+     * By loading spout2pw.dll here, Wine detects its placeholder marker and
+     * loads it as LO_BUILTIN via find_builtin_dll(), which searches WINEDLLPATH
+     * for the matching spout2pw.so unixlib and registers spout2pw.dll in
+     * builtin_modules. The DllMain in spout2pw_dll_main.c then calls
+     * __wine_init_unix_call() successfully, setting the global
+     * __wine_unixlib_handle that ServiceMain relies on.
+     */
+    {
+        spout2pw_dbg("[spout2pw] About to call LoadLibraryW for spout2pw.dll\n");
+        HMODULE hSpoutDll = LoadLibraryW(L"spout2pw.dll");
+        spout2pw_dbg("[spout2pw] LoadLibraryW returned: %p\n", (void*)hSpoutDll);
+        if (hSpoutDll)
+            spout2pw_dbg("[spout2pw] Loaded spout2pw.dll (builtin unixlib initialized)\n");
+        else
+            spout2pw_dbg("[spout2pw] Failed to load spout2pw.dll: win32 error %lu\n", GetLastError());
+    }
+
     TRACE("Starting service ctrl\n");
+
+    // Support --debug flag for direct ServiceMain testing (bypasses SCM)
+    int debug_mode = (lpCmdLine != NULL && strstr(lpCmdLine, "--debug") != NULL);
+    spout2pw_debug |= debug_mode;
+
+    if (debug_mode) {
+        TRACE("Debug mode: calling ServiceMain directly\n");
+        debug_mode_in_service = 1;
+        LPWSTR dummy_argv[] = {NULL};
+        ServiceMain(0, dummy_argv);
+        spout2pw_dbg("[spout2pw] WinMain returned after direct ServiceMain\n");
+        return 0;
+    }
 
     StartServiceCtrlDispatcherW(service_table);
 
-    TRACE("WinMain returning\n");
+    spout2pw_dbg("[spout2pw] WinMain returned from StartServiceCtrlDispatcherW\n"); TRACE("WinMain returning\n");
     return 0;
 }

@@ -161,3 +161,8 @@ ninja -C build/
 | libpng | `libpng16-16.dll` | — |
 | spoutdxtoc | submodule | submodule |
 | funnel | — | `funnel` + `funnel_vk` |
+
+## See Also
+
+- [WINE-INTEGRATION.md](WINE-INTEGRATION.md) — Detailed mechanics of how spout2pw.exe loads as a Wine builtin DLL, how `spout2pw.so` is found via `WINEDLLPATH`, service registration, and the c0000135 startup error.
+- [PLAN-MULTI-SENDER.md](PLAN-MULTI-SENDER.md) — Analysis of multiple Spout sender support and the direct-VkImage texture access method vs the older DMA-BUF approach.
