@@ -334,6 +334,18 @@ validate_paths() {
 
 spout2pw_builtindlls="spout2pw.dll"
 
+write_dxvk_conf() {
+    # DXVK may ignore DXVK_LOG_LEVEL if Proton or the game resets the env var.
+    # A dxvk.conf in system32 applies to spout2pw.exe (DXVK's perceived "game")
+    # regardless of environment inheritance.
+    local conf="$system32/dxvk.conf"
+    cat > "$conf" <<'EOF'
+[dxvk]
+logLevel = none
+EOF
+    log "Wrote DXVK config to $conf"
+}
+
 check_spout2pw_install() {
     check_nonexist() {
         dst="$1"
@@ -385,6 +397,9 @@ check_spout2pw_install() {
 }
 
 prepare_prefix() {
+    # Always ensure DXVK is silenced, even if the rest of the install is current.
+    write_dxvk_conf
+
     if check_spout2pw_install; then
         log "Spout2PW install is up-to-date"
         return
@@ -396,6 +411,9 @@ prepare_prefix() {
     for file in $spout2pw_builtindlls; do
         [ -e "$syswow64/$file" ] && rm -f "$syswow64/$file"
     done
+
+    # Remove any stale dxvk.conf so a fresh one is always written
+    rm -f "$system32/dxvk.conf"
 
     # Make sure spout2pw does not start up during the install, as it could lock the file.
     [ -e "$system32/spout2pw.exe" ] && rm -f "$system32/spout2pw.exe"
