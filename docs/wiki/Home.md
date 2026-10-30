@@ -76,7 +76,7 @@ Currently supported Wine/Proton versions:
 * Proton Experimental 10 (Steam built-in)
 * [GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom) 10-29 or newer (umu-launcher, Flatpak extension, manual install, etc.)
 
-**Note:** *Spout2PW requires features only available in Proton 10+ and Wine 11+. Older versions will not be supported. Wine 11+ support is not yet done but is planned. If you try to use an incompatible version, Spout2PW will show an error message box.*
+**Note:** *Spout2PW requires features only available in Proton 10+ (which is based on Wine 10). Standalone Wine 11+ support is not yet available, but planned. If you try to use an incompatible version, Spout2PW will show an error message box.*
 
 The Steam instructions depend on whether you're using Steam Flatpak, or a native Steam package. If you don't know, you can find out like this:
 

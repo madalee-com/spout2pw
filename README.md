@@ -12,8 +12,7 @@ See the [wiki page](https://github.com/madalee-com/spout2pw/wiki) for installati
 ## Building
 
 ```bash
-git submodule init
-git submodule update
+git submodule update --init
 ./build.sh
 ```
 
