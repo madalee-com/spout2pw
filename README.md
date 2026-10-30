@@ -7,7 +7,7 @@
 
 **If you like this, please help support me with the links above!**
 
-See the [wiki page](https://github.com/hoshinolina/spout2pw/wiki) for installation and usage instructions.
+See the [wiki page](https://github.com/madalee-com/spout2pw/wiki) for installation and usage instructions.
 
 ## Building
 
