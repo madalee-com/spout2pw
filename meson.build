@@ -64,7 +64,7 @@ libfunnel_proj = subproject(
     'test_apps=false',
     'egl=false',
     'default_library=static',
-    'static_pipewire=false',
+    'static_pipewire=true',
   ]
 )
 
