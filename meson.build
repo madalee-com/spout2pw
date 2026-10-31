@@ -74,6 +74,12 @@ funnel_vk = libfunnel_proj.get_variable('funnel_vk')
 # Fixups include dir
 fixups_include_dir = include_directories('src/fixups')
 
+# Bundle the mingw-targeted Vulkan headers so the build does not depend on
+# system packages that may be absent on minimal CI runners.
+vulkan_include_dir = [
+  include_directories('tools/vulkan-mingw-headers'),
+]
+
 # Build spout2dx.cpp as part of the main project
 spout2dx_src = [
   'src/spout2dx.cpp',
@@ -88,18 +94,14 @@ spout2dx_cpp_args = [
 spout2dx_lib = static_library(
   'spout2dx',
   spout2dx_src,
-  include_directories: [fixups_include_dir] + spout2_include_dir,
+  include_directories: [fixups_include_dir] + spout2_include_dir + vulkan_include_dir,
   cpp_args: spout2dx_cpp_args,
 )
 
 spout2dx_dep = declare_dependency(
   link_with: spout2dx_lib,
-  include_directories: [fixups_include_dir] + spout2_include_dir,
+  include_directories: [fixups_include_dir] + spout2_include_dir + vulkan_include_dir,
 )
-
-vulkan_include_dir = [
-  include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
-]
 
 windows_src = [
   'src/spout2pw.c',

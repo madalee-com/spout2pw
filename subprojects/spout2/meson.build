@@ -5,7 +5,6 @@ cpp = meson.get_compiler('cpp')
 spout2_include_dir = [
   include_directories('SPOUTSDK/SpoutGL'),
   include_directories('SPOUTSDK/SpoutDirectX/SpoutDX'),
-  include_directories('/usr/x86_64-w64-mingw32/include/vulkan/'),
 ]
 
 spout2_src = [

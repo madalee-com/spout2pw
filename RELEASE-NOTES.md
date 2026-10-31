@@ -1,3 +1,10 @@
+# Spout2PW 0.3.4
+
+## Fixes
+- **Vendored mingw-targeted Vulkan headers** in `tools/vulkan-mingw-headers/` so the build no longer depends on system packages that are absent on minimal CI runners. This resolves repeated CI failures for the 0.3.x tags.
+
+---
+
 # Spout2PW 0.3.0
 
 ## What's new
