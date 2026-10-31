@@ -3,7 +3,7 @@
 **[Spout2PW website](https://spout2pw.lina.yt)**
 
 > [!CAUTION]
-> **Transparency notice:** This fork was partially created with the assistance of local AI tools. The build pipeline, vendored dependencies, and CI configuration were generated or assisted by an AI coding agent; all code has been reviewed and is intentionally kept here.
+> **Transparency notice:** This fork was partially created with the assistance of local AI tools. The build pipeline, vendored dependencies, and CI configuration were generated or assisted by an AI coding agent.
 
 [![Github-sponsors](https://img.shields.io/github/sponsors/hoshinolina?label=Sponsor&logo=GitHub)](https://lina.yt/sponsor)
 [![Ko-Fi](https://shields.io/badge/ko--fi-Tip-ff5f5f?logo=ko-fi)](https://lina.yt/kofi)
