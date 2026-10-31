@@ -5,6 +5,3 @@
 [submodule "subprojects/pipewire-static"]
 	path = subprojects/pipewire-static
 	url = https://github.com/hoshinolina/pipewire-static
-[submodule "subprojects/spout2"]
-	path = subprojects/spout2
-	url = https://github.com/leadedge/Spout2.git

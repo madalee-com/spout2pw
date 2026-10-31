@@ -3,7 +3,7 @@
 ## What's new
 
 ### Build system improvements
-- **Spout2 is now a git submodule** (like libfunnel and pipewire-static) for reliable, network-independent builds — no more wrap-download flakiness on CI.
+- **Spout2 sources are now vendored** directly in `subprojects/spout2/` — zero external fetch required, builds work fully offline and CI is reliable.
 - **spoutdxtoc is now spout2dx**, statically linked directly into `spout2pw.exe`. No separate DLL needed in the package.
 - Package layout simplified: `spout2pw-dlls/x86_64-windows/` holds both `spout2pw.exe` and `spout2pw.dll`.
 
